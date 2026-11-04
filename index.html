@@ -1,0 +1,1803 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="급식 AI 문제해결(고등) 학생 10차시 동안 이상형 월드컵 앱이 급식 API, 별점 조사, 유사도, 회귀, 식단 개선안으로 자라는 과정을 12단계로 직접 써 보는 데모">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>급식 이상형 월드컵</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* 레이아웃: 위쪽 대진표 레일에서 단계를 고르고, 아래에서 그 단계의 앱(왼쪽)과 수업 근거(오른쪽)를 나란히 본다 */
+:root{
+  --bg:#EEF1EC; --surface:#FFFFFF; --sunk:#E3E8E2; --ink:#1B2420; --muted:#58655F; --line:#CBD4CD;
+  --accent:#B8432B; --accent-ink:#FFFFFF; --yolk:#C98A12; --yolk-soft:#FBEFCF;
+  --ok:#2B7A4B; --ok-soft:#DCF0E2; --bad:#B3261E; --bad-soft:#F8DEDB;
+  --code-bg:#1F2925; --code-fg:#E3EAE6;
+  --f-display:"Do Hyeon","Noto Sans KR",system-ui,sans-serif;
+  --f-body:"Noto Sans KR",system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#131816; --surface:#1B221F; --sunk:#242C29; --ink:#E6ECE8; --muted:#9BA9A2; --line:#33403A;
+  --accent:#E36D52; --accent-ink:#1A0E0A; --yolk:#F0BE52; --yolk-soft:#3A3120;
+  --ok:#6FC492; --ok-soft:#1E3327; --bad:#F08C82; --bad-soft:#3B2321;
+  --code-bg:#0D1210; --code-fg:#D6E0DA; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#131816; --surface:#1B221F; --sunk:#242C29; --ink:#E6ECE8; --muted:#9BA9A2; --line:#33403A;
+  --accent:#E36D52; --accent-ink:#1A0E0A; --yolk:#F0BE52; --yolk-soft:#3A3120;
+  --ok:#6FC492; --ok-soft:#1E3327; --bad:#F08C82; --bad-soft:#3B2321;
+  --code-bg:#0D1210; --code-fg:#D6E0DA; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.65}
+.wrap{max-width:1180px;margin:0 auto;padding-block:28px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1,h2,h3{font-family:var(--f-display);font-weight:400;text-wrap:balance;margin:0;line-height:1.2}
+h1{font-size:clamp(34px,6vw,54px)}
+h2{font-size:26px}
+h3{font-size:19px}
+p{margin:0}
+code,pre,.mono{font-family:var(--f-mono)}
+button{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--yolk);outline-offset:2px}
+
+/* 머리 */
+.top{display:grid;gap:10px;margin-bottom:26px}
+.eyebrow{font-size:12.5px;letter-spacing:.08em;color:var(--muted);font-weight:500}
+.lede{max-width:62ch;color:var(--muted)}
+
+/* 단계 레일: 세 마당으로 묶은 열두 칸 */
+#rail{display:grid;gap:14px;margin-bottom:24px}
+.rg{display:grid;gap:6px}
+.rg-label{font-size:12.5px;font-weight:700;color:var(--muted);letter-spacing:.04em}
+.rail{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
+.step{position:relative;z-index:1;display:grid;gap:4px;align-content:start;text-align:left;background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:10px 12px 12px;cursor:pointer;min-width:0}
+.step .no{font-family:var(--f-display);font-size:24px;line-height:1;color:var(--muted)}
+.step .nm{font-weight:700;font-size:14px;line-height:1.35}
+.step .ch{display:flex;flex-wrap:wrap;gap:4px}
+.chip{font-size:11.5px;padding:1px 7px;border-radius:99px;background:var(--sunk);color:var(--muted);white-space:nowrap}
+.chip.t{background:transparent;border:1px solid var(--line)}
+.step[aria-selected="true"]{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent)}
+.step[aria-selected="true"] .no{color:var(--accent)}
+.step:hover{border-color:var(--accent)}
+@media (max-width:860px){.rail{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:460px){.rail{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* 본문 */
+.stagehead{display:grid;gap:6px;margin-bottom:16px}
+.stagehead .goal{color:var(--muted);max-width:70ch}
+.grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:20px;align-items:start}
+@media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+.col{display:grid;gap:16px;min-width:0}
+.col>*,.panel>*,.app>*,#stage>*{min-width:0}
+
+.appframe{background:var(--surface);border:1.5px solid var(--line);border-radius:14px;overflow:hidden}
+.appbar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--sunk);border-bottom:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+.appbar .dot{width:9px;height:9px;border-radius:50%;background:var(--line)}
+.appbar .fname{font-family:var(--f-mono);margin-left:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app{padding:20px;display:grid;gap:14px}
+.app-title{font-family:var(--f-display);font-size:26px;text-align:center}
+.round{text-align:center;font-weight:700;color:var(--accent);letter-spacing:.04em}
+.progress{height:6px;border-radius:99px;background:var(--sunk);overflow:hidden}
+.progress span{display:block;height:100%;background:var(--accent);transition:width .25s}
+.match{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:12px;align-items:stretch}
+.vs{align-self:center;font-family:var(--f-display);font-size:22px;color:var(--muted)}
+.cand{min-height:120px;border-radius:12px;border:2px solid var(--line);background:var(--bg);cursor:pointer;padding:14px;font-size:clamp(19px,3.4vw,26px);font-weight:700;overflow-wrap:anywhere;transition:transform .12s,border-color .12s}
+.cand:hover:not(:disabled){border-color:var(--accent);transform:translateY(-2px)}
+.cand:disabled{cursor:wait;opacity:.6}
+.cand .k{display:block;font-size:12px;font-weight:500;color:var(--muted);margin-top:6px;font-family:var(--f-body)}
+@media (prefers-reduced-motion:reduce){.cand,.progress span{transition:none}.cand:hover:not(:disabled){transform:none}}
+.result{min-height:28px;text-align:center;color:var(--muted)}
+.result b{color:var(--ink)}
+.champ{display:grid;gap:8px;justify-items:center;text-align:center;padding:18px;border-radius:12px;background:var(--yolk-soft)}
+.champ .crown{font-family:var(--f-display);color:var(--yolk);font-size:16px;letter-spacing:.1em}
+.champ .name{font-family:var(--f-display);font-size:clamp(34px,7vw,52px);line-height:1.1;overflow-wrap:anywhere}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.row.c{justify-content:center}
+.btn{border:1.5px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 13px;cursor:pointer;font-size:14px;font-weight:500}
+.btn:hover:not(:disabled){border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.small{padding:4px 10px;font-size:13px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.field{display:grid;gap:4px}
+.field label{font-size:13px;color:var(--muted);font-weight:500}
+input[type=text],input[type=number]{font:inherit;color:var(--ink);background:var(--bg);border:1.5px solid var(--line);border-radius:8px;padding:7px 10px;width:100%;min-width:0}
+input[type=text]:focus,input[type=number]:focus{border-color:var(--accent);outline:none}
+
+.notice{font-size:13px;color:var(--muted);background:var(--sunk);border-radius:8px;padding:8px 12px}
+.alert{border-radius:10px;padding:10px 14px;background:var(--bad-soft);color:var(--bad);font-size:14px}
+.alert ul{margin:4px 0 0;padding-left:18px}
+.okbox{border-radius:10px;padding:10px 14px;background:var(--ok-soft);color:var(--ok);font-size:14px}
+.pill{display:inline-block;font-size:12px;font-weight:700;padding:1px 8px;border-radius:99px}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}
+.pill.bad{background:var(--bad-soft);color:var(--bad)}
+.pill.wait{background:var(--yolk-soft);color:var(--yolk)}
+
+/* 패널 */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;display:grid;gap:10px;min-width:0}
+.panel h3{display:flex;align-items:baseline;gap:8px}
+.panel h3 small{font-family:var(--f-body);font-size:12px;color:var(--muted);font-weight:400}
+.added{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.added li{display:grid;grid-template-columns:22px minmax(0,1fr);gap:6px}
+.added li::before{content:"+";font-family:var(--f-mono);font-weight:700;color:var(--accent);text-align:center}
+.checks{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.checks label{display:grid;grid-template-columns:20px minmax(0,1fr);gap:8px;align-items:start;cursor:pointer}
+.checks input{margin-top:5px;accent-color:var(--accent)}
+.prompt{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.prompt .ph{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 10px;background:var(--sunk);font-size:13px;font-weight:500}
+.prompt .ph .who{color:var(--muted);font-weight:400}
+.prompt p{padding:10px 12px;font-size:14px;white-space:pre-wrap}
+pre.code{margin:0;background:var(--code-bg);color:var(--code-fg);border-radius:10px;padding:12px 14px;font-size:12.5px;line-height:1.6;overflow-x:auto}
+details>summary{cursor:pointer;font-weight:500}
+details[open]>summary{margin-bottom:8px}
+
+/* 표 */
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;font-variant-numeric:tabular-nums}
+th,td{padding:6px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{background:var(--sunk);font-weight:500;color:var(--muted);font-size:12.5px}
+tr:last-child td{border-bottom:0}
+tr.fresh td{background:var(--yolk-soft)}
+td.num,th.num{text-align:right}
+.state td:first-child{color:var(--muted)}
+.state td{white-space:normal}
+
+/* 흐름도 */
+.flow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;align-items:stretch}
+.flow div{border:1.5px solid var(--line);border-radius:10px;padding:8px 10px;font-size:13px;background:var(--bg);position:relative}
+.flow b{display:block;font-family:var(--f-display);font-weight:400;font-size:17px}
+.flow div:not(:last-child)::after{content:"→";position:absolute;right:-12px;top:50%;transform:translateY(-50%);color:var(--muted);font-weight:700}
+@media (max-width:460px){.flow{grid-template-columns:minmax(0,1fr)}.flow div:not(:last-child)::after{content:"↓";right:auto;left:50%;top:auto;bottom:-15px;transform:none}}
+
+.chart text{fill:var(--muted);font-family:var(--f-body);font-size:12px}
+.chart .val{fill:var(--ink);font-weight:700}
+.chart .bar{fill:var(--accent)}
+.chart .bar.top{fill:var(--yolk)}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.chart .axis{stroke:var(--muted);stroke-width:1.2}
+
+.sentences{display:grid;gap:8px}
+.sentences .field label b{color:var(--ink)}
+
+.next{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.next div{border:1px dashed var(--line);border-radius:10px;padding:10px 12px;font-size:13.5px}
+.next b{display:block;font-family:var(--f-display);font-weight:400;font-size:17px}
+footer{margin-top:36px;font-size:12.5px;color:var(--muted);display:grid;gap:4px}
+.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+@media (max-width:460px){.two{grid-template-columns:minmax(0,1fr)}}
+.cands8{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+@media (max-width:520px){.cands8{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <div class="eyebrow">AI교육센터 파일럿 프로그램 / 급식 AI 문제해결 고등</div>
+    <h1>급식 이상형 월드컵</h1>
+    <p class="lede">학생이 10차시 동안 만드는 코드를 열두 단계로 나누어 보여 줍니다. 이상형 월드컵으로 시작한 앱이 급식 API 수집, 별점 조사, 유사도, 회귀, 검증을 거쳐 식단 개선안으로 이어집니다. 단계를 고르면 그 차시까지 만든 앱을 직접 사용해 볼 수 있고, 오른쪽에서 그 단계의 요청 문장과 확인 항목을 볼 수 있습니다.</p>
+  </header>
+
+  <nav id="rail" aria-label="차시별 단계"></nav>
+
+  <section id="stage" aria-live="polite"></section>
+
+  <footer>
+    <p>근거 자료: 급식_AI문제해결_고등 학생 01-10차시 검토본 v05, 교원 01-10차시 검토본 v04 (2026-11-03), 상세설계 260714. 교원 1차시(바이브코딩 첫걸음)는 이 앱을 만들기 전 준비 활동이라 단계로 따로 두지 않았습니다.</p>
+    <p>월드컵 후보, 별점 응답, 잔반률은 모두 수업용 가상값 또는 모의값입니다. 실제 학생 응답과 실제 잔반 자료는 들어 있지 않습니다. 급식 메뉴만 NEIS 공개 API의 실제 응답이며, 시트는 이 페이지 안의 모의 시트입니다. 시트의 자료는 외부에 전송하지 않습니다.</p>
+  </footer>
+</div>
+
+<script>
+(() => {
+"use strict";
+
+/* ---------- 공용 도구 ---------- */
+const $ = (s, r = document) => r.querySelector(s);
+function el(tag, attrs = {}, kids = []) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === "class") e.className = v;
+    else if (k === "text") e.textContent = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of [].concat(kids)) if (c != null && c !== false) e.append(c.nodeType ? c : document.createTextNode(String(c)));
+  return e;
+}
+const store = {
+  get(key) { try { return { ok: true, raw: localStorage.getItem(key) }; } catch (e) { return { ok: false, raw: null }; } },
+  set(key, val) { try { localStorage.setItem(key, val); return true; } catch (e) { return false; } },
+  remove(key) { try { localStorage.removeItem(key); return true; } catch (e) { return false; } }
+};
+function rid(n = 8) {
+  try { if (crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
+  let s = ""; for (let i = 0; i < n * 4; i++) s += "0123456789abcdef"[Math.floor(Math.random() * 16)];
+  return s;
+}
+const ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const randomAlias = () => "연습" + ALPHA[Math.floor(Math.random() * 26)];
+const roundName = n => n === 2 ? "결승" : n + "강";
+function copyText(text, btn) {
+  const done = () => { const o = btn.textContent; btn.textContent = "복사됨"; setTimeout(() => btn.textContent = o, 1400); };
+  try {
+    navigator.clipboard.writeText(text).then(done, () => fallback());
+  } catch (e) { fallback(); }
+  function fallback() {
+    const p = btn.closest(".prompt")?.querySelector("p");
+    if (!p) return;
+    const r = document.createRange(); r.selectNodeContents(p);
+    const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+    btn.textContent = "선택됨, 복사하세요";
+    setTimeout(() => btn.textContent = "복사", 1800);
+  }
+}
+
+/* ---------- 설계 메모 (1차시 산출물, 2단계 이후의 재료) ---------- */
+const EXAMPLE = {
+  topic: "과일",
+  question: "학교 간식으로 어떤 과일을 더 좋아할까?",
+  criterion: "지금 먹고 싶은 마음으로 선택하기",
+  candidates: ["사과", "배", "귤", "딸기", "포도", "복숭아", "수박", "바나나"]
+};
+const DESIGN_KEY = "meal_worldcup_design_demo";
+let design = (() => {
+  const g = store.get(DESIGN_KEY);
+  if (g.ok && g.raw) { try { const d = JSON.parse(g.raw); if (d && Array.isArray(d.candidates)) return d; } catch (e) {} }
+  return structuredClone(EXAMPLE);
+})();
+const saveDesign = () => store.set(DESIGN_KEY, JSON.stringify(design));
+
+function validate(list) {
+  const errs = [];
+  const t = list.map(x => typeof x === "string" ? x.trim() : "");
+  if (t.length !== 8) errs.push(`후보가 ${t.length}개입니다. 정확히 8개가 필요합니다.`);
+  t.forEach((x, i) => { if (!x) errs.push(`${i + 1}번째 후보가 비어 있습니다.`); });
+  const seen = new Set(), dup = new Set();
+  t.filter(Boolean).forEach(x => seen.has(x) ? dup.add(x) : seen.add(x));
+  dup.forEach(x => errs.push(`"${x}" 후보가 두 번 이상 들어 있습니다.`));
+  return { ok: errs.length === 0, errs, clean: t };
+}
+
+/* ---------- 토너먼트 엔진 (교원 3차시 상태 변수 그대로) ---------- */
+function newGame(candidates) {
+  return { original: candidates, currentRound: candidates.slice(), winners: [], matchIndex: 0,
+           busy: false, processed: new Set(), log: [], done: false, champion: null };
+}
+function choose(g, side, extra = {}) {
+  if (g.done || g.busy) return false;
+  const id = g.currentRound.length + "-" + g.matchIndex;
+  if (g.processed.has(id)) return false;
+  g.busy = true; g.processed.add(id);
+  const left = g.currentRound[g.matchIndex], right = g.currentRound[g.matchIndex + 1];
+  const selected = side === 1 ? right : left;
+  g.winners.push(selected);
+  g.log.push({ roundSize: g.currentRound.length, match: g.matchIndex / 2 + 1, left, right, selected, ...extra });
+  g.matchIndex += 2;
+  if (g.matchIndex >= g.currentRound.length) { g.currentRound = g.winners; g.winners = []; g.matchIndex = 0; }
+  if (g.currentRound.length === 1) { g.done = true; g.champion = g.currentRound[0]; }
+  return true;
+}
+
+/* ---------- 기록 저장 (교원 4차시) ---------- */
+const RUNS_KEY = "meal_worldcup_v1";
+const runsState = { runs: [], status: "", level: "ok", locked: false };
+function loadRuns() {
+  const g = store.get(RUNS_KEY);
+  if (!g.ok) { runsState.runs = []; runsState.locked = true; runsState.level = "bad";
+    runsState.status = "저장소를 읽을 수 없습니다(비공개 모드나 저장 차단). 기존 저장값을 보호하려고 이번 기록은 화면에만 남깁니다."; return; }
+  if (g.raw === null) { runsState.runs = []; runsState.locked = false; runsState.level = "ok";
+    runsState.status = "저장된 회차가 없습니다. 결승까지 마치면 이 브라우저에 한 회차가 저장됩니다."; return; }
+  try {
+    const v = JSON.parse(g.raw);
+    const validRun = r => r && typeof r === "object"
+      && ["runId", "alias", "topic", "version", "winner"].every(k => typeof r[k] === "string")
+      && Array.isArray(r.choices) && r.choices.length === 7
+      && r.choices.every(c => c && typeof c.selected === "string")
+      && r.choices[6].selected === r.winner;
+    if (!Array.isArray(v) || !v.every(validRun)) throw new Error("형식");
+    runsState.runs = v; runsState.locked = false; runsState.level = "ok";
+    runsState.status = `이 브라우저에 저장된 완료 회차 ${v.length}개를 복원했습니다.`;
+  } catch (e) {
+    runsState.runs = []; runsState.locked = true; runsState.level = "bad";
+    runsState.status = "저장된 기록을 복원할 수 없습니다. 원문은 지우지 않고 그대로 두며, 새 기록도 덮어쓰지 않습니다.";
+  }
+}
+function saveRun(run) {
+  runsState.runs.push(run);
+  if (runsState.locked) { runsState.level = "bad"; runsState.status = "기존 저장값을 보호하는 중이라 이번 회차는 화면에만 남깁니다. 연습 기록 지우기에 성공하면 다시 저장합니다."; return false; }
+  const ok = store.set(RUNS_KEY, JSON.stringify(runsState.runs));
+  runsState.level = ok ? "ok" : "bad";
+  runsState.status = ok ? `완료 회차를 저장했습니다. 지금 저장된 회차는 ${runsState.runs.length}개입니다.`
+                        : "저장에 실패했습니다. 이번 회차는 화면에만 남고 새로고침하면 사라집니다.";
+  return ok;
+}
+loadRuns();
+
+/* ---------- 모의 시트와 saveVote (교원 5~6차시 Code.gs를 브라우저 안에서 흉내) ---------- */
+const SHEET_KEY = "meal_worldcup_sheet_demo";
+const HEADERS = ["requestId", "alias", "topic", "winner", "receivedAt"];
+let sheetLocked = false;
+let sheet = (() => {
+  const g = store.get(SHEET_KEY);
+  if (!g.ok) { sheetLocked = true; return []; }
+  if (g.raw === null) return [];
+  try {
+    const v = JSON.parse(g.raw);
+    const validRow = r => Array.isArray(r) && r.length === 5 && r.every(x => typeof x === "string");
+    if (Array.isArray(v) && v.every(validRow)) return v;
+  } catch (e) {}
+  sheetLocked = true;   // 손상된 원문은 덮어쓰지 않는다
+  return [];
+})();
+const saveSheet = () => sheetLocked ? false : store.set(SHEET_KEY, JSON.stringify(sheet));
+const pendingVotes = new Map();   // 확인하지 못한 요청은 단계를 옮겨도 남긴다
+let sending = false, lastPendingMsg = "";
+const net = { failBefore: false, loseReply: false };
+
+function saveVoteOn(rows, p) {
+  const cands = validate(design.candidates).clean;
+  if (!p || typeof p !== "object" || Array.isArray(p) ||
+      Object.keys(p).sort().join(",") !== "alias,requestId,topic,winner" ||
+      typeof p.requestId !== "string" || typeof p.alias !== "string" ||
+      typeof p.topic !== "string" || typeof p.winner !== "string" ||
+      !/^[a-zA-Z0-9-]{8,64}$/.test(p.requestId) || !/^연습[A-Z]$/.test(p.alias) ||
+      p.topic !== design.topic || !cands.includes(p.winner)) throw new Error("INVALID_INPUT");
+  const prior = rows.find(r => r[0] === p.requestId);
+  if (prior) {
+    if (prior[1] !== p.alias || prior[2] !== p.topic || prior[3] !== p.winner) throw new Error("REQUEST_CONFLICT");
+    return { ok: true, duplicate: true, requestId: p.requestId };
+  }
+  rows.push([p.requestId, p.alias, p.topic, p.winner, new Date().toISOString()]);
+  return { ok: true, duplicate: false, requestId: p.requestId };
+}
+function callSaveVote(p) {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      if (net.failBefore) return reject(new Error("연결 실패(모의)"));
+      let res;
+      try { res = saveVoteOn(sheet, p); saveSheet(); } catch (e) { return reject(e); }
+      if (net.loseReply) return reject(new Error("응답 유실(모의)"));
+      resolve(res);
+    }, 650);
+  });
+}
+
+/* ---------- 단계 정의 ---------- */
+const STAGES = [
+  { id: "s1", name: "치킨 월드컵 체험", tags: ["학생 1차시"],
+    goal: "교사 예제로 8강부터 결승까지 직접 고르고, 선택과 이유를 함께 기록합니다. 그다음 내가 만들 월드컵의 주제와 후보 8개를 설계 메모로 남깁니다.",
+    file: "급식_1차시_치킨월드컵_예제.html",
+    added: ["두 항목 중 하나를 고르면 고른 항목만 다음 라운드로 올라갑니다", "8강 네 경기, 4강 두 경기, 결승 한 경기로 7번 선택하면 우승 1개가 남습니다", "경기마다 선택 이유를 짧게 적고 결과 기록표로 모아 봅니다", "설계 메모(주제, 질문, 후보 8개, 선택 기준)를 바탕으로 2단계 앱을 만듭니다"],
+    prompts: [],
+    checks: ["예제 HTML 실행, 다음 라운드와 다시하기 동작을 수업 전에 확인", "앱 실행이 어려우면 8강 대진표와 개인 메모로 같은 활동 진행", "주제 선택과 결과 공개는 자율이며 실명 정보는 수집하지 않음", "질문을 읽으면 무엇을 고를지 알 수 있는가", "후보 8개가 같은 기준으로 비교되는가, 겹치는 후보는 없는가", "누군가를 평가하거나 개인 정보를 묻지는 않는가"],
+    code: null },
+  { id: "s2", name: "한 경기 화면", tags: ["학생 2차시 전반", "교원 2차시"],
+    goal: "후보 목록을 배열 한 곳에 두고, 첫 두 후보를 같은 크기의 버튼으로 보여 줍니다. 버튼을 누르면 고른 이름만 표시하고 아직 다음 경기로 넘어가지 않습니다.",
+    file: "index.html  (v01, 한 경기)",
+    added: ["candidates 배열 하나에서 후보 이름을 읽어 화면에 표시", "첫 두 후보 candidates[0], candidates[1]을 같은 크기의 버튼으로 표시", "누른 후보 이름을 결과 영역에 textContent로 표시", "후보가 8개가 아니거나 빈 이름, 중복 이름이 있으면 시작하지 않고 고칠 조건을 안내"],
+    prompts: [
+      { who: "학생", title: "첫 프롬프트", text: "주제는 [과일]이고 후보는 [8개 이름]이야.\n두 후보 중 하나를 고르는 HTML을 만들어 줘.\n키보드로도 선택하고, 선택한 이름을 보여 줘.\n외부 연결, 실명 입력 없이 한 파일로 실행하게 해 줘." },
+      { who: "교원", title: "전체 입력 프롬프트", text: "빈 index.html에서 과일 월드컵의 한 경기 화면을 만들어 줘. candidates 배열은 [\"사과\", \"배\", \"귤\", \"딸기\", \"포도\", \"복숭아\", \"수박\", \"바나나\"]로 해 줘. 첫 두 후보 candidates[0], candidates[1]만 같은 크기의 실제 버튼에 표시해 줘. 버튼을 누르면 선택한 이름을 결과 영역의 textContent에 표시해 줘. 아직 다음 경기로 넘어가거나 저장하지 마. 후보 이름은 배열 한 곳에서만 바꾸도록 해 줘. 외부 연결 없이 HTML 한 파일로 만들고 배열과 화면이 연결되는 부분에 짧은 주석을 넣어 줘." },
+      { who: "교원", title: "보강 프롬프트", text: "candidates 배열의 이름 앞뒤 공백을 trim한 뒤 검사해 줘. 후보가 정확히 8개가 아니거나, 빈 문자열이 있거나, 같은 이름이 두 번 있으면 경기를 시작하지 말고 어떤 조건을 고쳐야 하는지 화면에 알려 줘. 후보를 자동 추가하거나 자동 삭제하지 마." }
+    ],
+    checks: ["사과 버튼을 누르면 \"사과\", 배 버튼을 누르면 \"배\"가 표시된다", "배열의 사과를 청사과로 바꾸면 첫 버튼과 선택 결과도 청사과가 된다", "다른 일곱 후보는 그대로 유지된다", "후보 7개, 빈 이름, 중복 이름에서 각각 알맞은 안내가 나온다", "Tab으로 버튼이 구분되고 Enter나 Space로 선택된다", "문구가 길어도 두 버튼이 겹치지 않는다"],
+    code: `// 후보는 이 배열 한 곳에서만 바꾼다
+const candidates = ["사과", "배", "귤", "딸기", "포도", "복숭아", "수박", "바나나"];
+
+// 시작 전 검사: 8개, 빈 이름 없음, 중복 없음
+const ok = candidates.length === 8
+  && candidates.every(x => typeof x === "string" && x.trim())
+  && new Set(candidates.map(x => x.trim())).size === 8;
+
+// 화면은 배열의 값을 읽어 표시만 한다
+const firstPair = candidates.slice(0, 2);
+leftBtn.textContent = firstPair[0];
+rightBtn.textContent = firstPair[1];
+leftBtn.onclick = () => result.textContent = firstPair[0];` },
+  { id: "s3", name: "토너먼트 연결", tags: ["학생 2차시 후반", "교원 3차시"],
+    goal: "고른 후보만 승자 목록에 넣고, 라운드가 끝나면 승자들이 새 후보가 됩니다. 연속 클릭을 막고 다시하기로 모든 경기 상태를 처음으로 되돌립니다.",
+    file: "index.html  (v02, 토너먼트)",
+    added: ["currentRound(이번 후보), winners(다음 승자), matchIndex(경기 위치) 세 상태로 진행", "라운드가 끝나면 currentRound를 winners로 바꾸고 위치를 0으로", "선택 순간 두 버튼을 잠그고 같은 경기 ID는 다시 처리하지 않음", "우승 화면과 다시하기, 교사 디버그 영역에서 상태 확인"],
+    prompts: [
+      { who: "학생", title: "기능 추가 요청", text: "고른 후보만 다음 라운드 목록에 넣어 줘.\n8강 네 경기가 끝나면 4강 두 경기를 보여 줘.\n결승을 고르면 우승 후보와 다시하기를 보여 줘.\n기존 주제와 후보 이름은 그대로 유지해 줘." },
+      { who: "교원", title: "전체 확장 프롬프트", text: "두 후보 선택 화면에 라운드를 연결해 줘. 초기 배열은 사과, 배, 귤, 딸기, 포도, 복숭아, 수박, 바나나 순서이며 아직 무작위로 섞지 마. currentRound는 이번 라운드의 후보 배열, winners는 다음 라운드의 승자 배열, matchIndex는 이번 경기의 첫 후보 위치로 사용해 줘. 한 번 선택할 때 winners에 선택한 후보 한 개만 넣고 matchIndex를 2만큼 늘려. 이번 라운드가 끝나면 currentRound를 winners로 교체하고 winners=[]와 matchIndex=0으로 초기화해 줘. 후보가 한 개면 우승 이름과 다시하기만 보여 줘. 설명용 상태는 교사 디버그 영역에서만 확인할 수 있게 해 줘." },
+      { who: "교원", title: "연속 클릭 수정 프롬프트", text: "빠른 두 번 클릭으로 한 경기가 중복 처리되지 않게 해 줘. 선택을 받는 즉시 busy=true로 하고 두 버튼을 비활성화해. 각 경기에는 round 크기와 경기 위치로 만든 matchId를 붙여 이미 처리한 matchId는 무시해 줘. 승자와 로그를 한 번 추가한 뒤 다음 경기 화면을 새로 그리고, 새 화면에서만 입력을 다시 허용해 줘. 우승 뒤 다시하기를 누르면 원본 후보 배열의 복사본으로 돌아가고 winners, matchIndex, 로그, processedMatchIds, busy를 초기화해 줘. 원본 candidates 배열은 변형하지 마." }
+    ],
+    checks: ["항상 왼쪽 선택: 우승 사과, 선택 7건", "항상 오른쪽 선택: 우승 바나나, 선택 7건", "8강을 마친 순간: 후보 4개, 새 라운드 위치 0", "우승 후 다시하기: 8개 후보, 선택 기록 0건", "빠른 두 번 클릭에도 한 경기는 한 번만 기록된다"],
+    code: `function choose(side) {
+  if (busy) return;                       // 처리 중이면 무시
+  const id = currentRound.length + "-" + matchIndex;
+  if (processed.has(id)) return;          // 이미 처리한 경기
+  busy = true; processed.add(id);
+  const pick = currentRound[matchIndex + side];
+  winners.push(pick);                     // 승자 한 개만
+  log.push({ roundSize: currentRound.length, match: matchIndex / 2 + 1, selected: pick });
+  matchIndex += 2;
+  if (matchIndex >= currentRound.length) { // 라운드 종료
+    currentRound = winners; winners = []; matchIndex = 0;
+  }
+  render();                               // 새 화면을 그린 뒤
+  requestAnimationFrame(() => busy = false); // 다시 입력 허용
+}` },
+  { id: "s4", name: "결과를 기록으로", tags: ["교원 4차시", "학생 3차시 준비"],
+    goal: "한 회차를 회차 ID, 무작위 별명, 주제, 버전, 선택 7건, 우승으로 기록하고 이 브라우저의 localStorage에 저장합니다. 저장 위치와 범위를 화면에 알립니다.",
+    file: "index.html  (v03, 브라우저 저장)",
+    added: ["회차마다 runId, 무작위 별명(연습A 형식), 주제, 버전, choices, winner를 기록", "결승 전에는 winner를 null로 두고, 결승을 마칠 때 한 번만 저장", "localStorage 키 meal_worldcup_v1 하나에 JSON으로 저장하고 복원", "다시하기는 새 경기만 초기화하고 완료 목록은 보존", "연습 기록 지우기는 확인 뒤 이 앱의 키만 제거"],
+    prompts: [
+      { who: "교원", title: "기록 형식 프롬프트", text: "토너먼트 한 회차를 runId, 가상 별명, 주제, 버전, choices, winner로 기록해 줘. choices에는 라운드 후보 수, 경기 번호, 왼쪽, 오른쪽 후보, 선택 후보를 넣어. 결승을 마치기 전 winner는 null로 두고, 결승 종료 시 최종 결과를 한 번만 기록해. 실명, 학번, 이메일, IP 수집 코드, 건강정보는 넣지 마. 화면 표는 textContent로 안전하게 표시해 줘." },
+      { who: "교원", title: "브라우저 저장 프롬프트", text: "완료한 회차 목록을 localStorage의 meal_worldcup_v1 키 하나에 JSON.stringify로 저장해 줘. 앱 시작 때 getItem으로 읽고 JSON.parse로 복원하되 저장 접근 실패와 잘못된 JSON을 try/catch로 처리해 화면에 안내해 줘. 오류가 나면 기존 값을 자동 삭제하거나 새 빈 목록으로 덮어쓰지 마. \"연습 기록 지우기\"는 확인 후 removeItem(\"meal_worldcup_v1\")만 실행하고 localStorage.clear()는 사용하지 마. 화면에 저장 위치, 외부 전송 없음, 공용 기기에서 다른 사용자에게 보일 수 있다는 안내를 넣어 줘." }
+    ],
+    checks: ["완료 후 새로고침: 저장 허용 환경에서 완료 기록이 복원된다", "다른 브라우저로 열기: 기록이 자동 공유되지 않는다", "다시하기 한 번: 새 경기는 0건, 완료 목록은 보존된다", "연습 기록 지우기: 확인 뒤 이 앱의 기록만 제거된다", "7번 선택한 경로가 빠짐없이 기록되고 우승이 마지막 선택과 같다", "실명, 학번, 건강정보 입력 칸이 없다"],
+    code: `// 결승을 마칠 때 한 번만
+const run = { runId, alias, topic: "과일", version: "v01", choices, winner };
+runs.push(run);
+localStorage.setItem("meal_worldcup_v1", JSON.stringify(runs));
+
+// 앱 시작 때 복원
+try {
+  const raw = localStorage.getItem("meal_worldcup_v1");
+  runs = raw === null ? [] : JSON.parse(raw);
+} catch (e) {
+  showNotice("복원할 수 없음");  // 원문은 지우지 않는다
+}` },
+  { id: "s5", name: "친구들과 데이터 모으기", tags: ["학생 3차시", "교원 5~6차시"],
+    goal: "완료한 회차 한 건을 시트의 한 행으로 보냅니다. 같은 요청 ID로 재시도하면 행이 늘지 않고, 실패와 중복을 구분해 안내합니다. 이 페이지의 시트는 브라우저 안의 모의 시트입니다.",
+    file: "Index.html + Code.gs  (v04, 시트 연동 모의)",
+    added: ["완료 회차를 {requestId, alias, topic, winner} 한 객체로 묶어 전송", "전송 중 버튼 잠금, 응답을 받은 뒤에만 결과 표시", "서버(saveVote)는 허용한 값만 받고 같은 requestId는 다시 저장하지 않음", "실패하면 같은 요청 ID로 재시도", "한 행이 한 응답인지, 빈칸과 중복이 없는지 자료 점검"],
+    prompts: [
+      { who: "교원", title: "Apps Script 작성 요청", text: "아래 열 구조를 가진 교원 가상 실습용 Apps Script를 작성해 줘. 탭 이름은 results, 1행 머리글은 requestId, alias, topic, winner, receivedAt이야. 시트 식별자는 REPLACE_WITH_APPROVED_TEST_SHEET_ID라는 자리표시자로 남겨 줘. 원자료 목록을 외부에 돌려주는 함수는 만들지 마." }
+    ],
+    checks: ["새 ID, 연습A, 사과: 새 행 1개, duplicate=false", "같은 ID와 같은 값: 새 행 0개, duplicate=true", "같은 ID, 우승만 변경: REQUEST_CONFLICT, 새 행 0개", "새 ID, 연습B, 배: 새 행 1개, 기존 값 유지", "앱의 우승 후보와 시트의 우승 후보가 일치한다", "전송 성공 메시지만 보고 저장 성공으로 단정하지 않고 시트를 확인한다", "연동이 막히면 종이 기록표나 가상 표로 같은 검증을 한다"],
+    code: `// Code.gs (요약)
+function saveVote(p) {
+  if (!허용한_키와_형식(p)) throw new Error("INVALID_INPUT");
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(3000)) throw new Error("BUSY_RETRY_SAME_ID");
+  try {
+    const prior = rows.find(r => r[0] === p.requestId);
+    if (prior) {
+      if (내용이_다르면) throw new Error("REQUEST_CONFLICT");
+      return { ok: true, duplicate: true, requestId: p.requestId };
+    }
+    sheet.appendRow([p.requestId, p.alias, p.topic, p.winner, new Date().toISOString()]);
+    return { ok: true, duplicate: false, requestId: p.requestId };
+  } finally { lock.releaseLock(); }
+}
+
+// Index.html: 실패해도 pending을 보존해 같은 requestId로 재시도
+google.script.run
+  .withSuccessHandler(showSaved)
+  .withFailureHandler(keepPendingAndRetry)
+  .saveVote(pending);` },
+  { id: "s6", name: "모은 데이터 분석", tags: ["학생 4차시", "교원 7차시"],
+    goal: "같은 주제, 같은 규칙의 기록만 묶어 후보별 우승 횟수와 비율을 표와 막대그래프로 나타냅니다. 막대 합계를 원본 건수와 대조하고, 관찰, 해석, 한계를 나누어 작성합니다.",
+    file: "분석 시트  (v05, 집계와 그래프)",
+    added: ["후보별 우승 횟수와 비율 집계, 합계를 원본 건수와 대조", "세로 막대그래프(0부터 시작, 제목에 대상과 응답 수)", "관찰, 비교, 한계, 추가 확인 네 문장으로 해석", "유사도는 가상 별점 두 칸으로 개념만 연결"],
+    prompts: [],
+    checks: ["세 막대의 합이 원본 응답 수와 같다", "가로축은 후보, 세로축은 우승 횟수(건)이며 세로축은 0부터 시작한다", "그래프 제목에 대상, 기간, 응답 수가 있다", "관찰 문장은 표에서 직접 확인할 수 있다", "'학교에서 가장 인기'처럼 수집 범위 밖으로 넓히지 않는다", "개인별 결과를 전체 공개하지 않는다"],
+    code: `A1 우승후보, A2:A7  사과 / 사과 / 귤 / 배 / 사과 / 귤
+C1 후보, D1 우승횟수, E1 비율
+D2 =COUNTIF($A$2:$A$7, C2)     → D4까지 복사
+E2 =D2/COUNTA($A$2:$A$7)      → E4까지 복사, 백분율 표시
+C1:D4 선택 → 삽입 → 차트 → 세로 막대그래프
+제목: 가상 과일 월드컵 우승 빈도(n=6)` },
+  { id: "s7", name: "급식 API 수집", tags: ["학생 5차시", "교원 8차시"],
+    goal: "NEIS 급식식단정보 API에 교육청, 학교, 식사, 날짜 조건을 보내고 응답을 읽습니다. 정상, 자료 없음, 오류, 잘림을 서로 다른 상태로 기록하고, 메뉴 원문을 보존한 채 출처를 붙인 표로 정리합니다.",
+    file: "급식_5차시_당곡고실데이터_API실습.html",
+    added: ["요청 조건(교육청, 학교, 식사, 날짜)과 응답 항목을 나누어 표시", "INFO-000 정상, INFO-200 자료 없음, ERROR-300 필수 인자 누락, 통신 실패를 다른 상태로 안내", "조회 취소, 늦게 도착한 응답 무시", "인증키 없는 조회는 첫 5건만 온다는 잘림 표시", "메뉴 원문을 보존하고 정리 열은 따로, 조회 시각과 출처를 함께 기록"],
+    prompts: [],
+    checks: ["11월 1일 조회: INFO-200을 빈 자료로 처리하고 잔반 0이나 휴교로 해석하지 않는다", "필수 인자를 뺀 조회: 성공과 구분된 오류 안내가 나온다", "조회 중 취소: 취소 상태가 표시되고 늦게 온 응답이 화면을 덮지 않는다", "저장된 실데이터: 조회 시각이 보이고 최신 조회가 아님을 밝힌다", "10월 전체 인증키 없는 조회: 전체 15건 중 5건만 받았다고 표시한다", "급식인원수(MLSV_FGR)와 잔반량을 같은 값으로 사용하지 않는다", "인증키를 HTML, 발표 화면, 공개 저장소에 넣지 않는다"],
+    code: `const url = "https://open.neis.go.kr/hub/mealServiceDietInfo?Type=json"
+  + "&ATPT_OFCDC_SC_CODE=B10&SD_SCHUL_CODE=7010073&MMEAL_SC_CODE=2"
+  + \`&MLSV_FROM_YMD=\${ymd}&MLSV_TO_YMD=\${ymd}\`;
+
+const myTurn = ++requestNo;            // 늦게 온 응답을 가려낸다
+controller = new AbortController();    // 조회 취소
+const data = await (await fetch(url, { signal: controller.signal })).json();
+if (myTurn !== requestNo) return;      // 그사이 새 조회가 시작됨
+
+if (data.RESULT?.CODE === "INFO-200") showEmpty();   // 자료 없음
+else if (data.RESULT) showError(data.RESULT.CODE);   // ERROR-300 등
+else {
+  const [head, body] = data.mealServiceDietInfo;
+  const total = head.head[0].list_total_count;
+  const rows = body.row;                // total > rows.length 이면 잘림
+}` },
+  { id: "s8", name: "급식 선호도 별점 앱", tags: ["학생 6차시"],
+    goal: "메뉴마다 같은 1~5점 기준으로 별점을 받고, 먹어 보지 않았거나 응답하지 않은 경우는 빈칸으로 남깁니다. 메뉴 하나에 대한 응답 하나를 한 행으로 저장하고, 메뉴별 평균 옆에 응답 수를 함께 표시합니다.",
+    file: "급식_6차시_선호도조사.html",
+    added: ["메뉴마다 같은 질문과 1~5점 척도, 먹어 보지 않음과 응답하지 않음은 빈칸", "제출 전에 요약을 보여 주고 한 번만 기록(중복 클릭 방지)", "한 메뉴 응답을 한 행으로 저장하는 긴 표", "미응답은 평균의 분모에서 빼고, 유효 응답이 없으면 평균을 계산하지 않음", "평균 옆에 응답 수를 함께 표시"],
+    prompts: [
+      { who: "학생", title: "별점 화면 요청", text: "메뉴 A, B, C 각각에 1~5점 선택칸을 만들어 줘.\n1은 전혀 좋아하지 않음, 5는 매우 좋아함이야.\n먹어 보지 않음, 응답하지 않음은 빈칸으로 남겨 줘.\n실명 없이 확인 화면을 거쳐 한 번만 기록하게 해 줘." },
+      { who: "교원", title: "완전한 요청 예시", text: "단일 HTML로 메뉴 A, B, C 선호도 화면을 만들어 줘. 각 메뉴는 1~5점의 같은 척도를 사용하고 미응답은 빈칸으로 남겨 줘. 제출 전에 요약을 보여 주고 중복 클릭을 막아 줘. 지금은 로컬 가상 저장만 하고 외부 전송은 하지 마. 0, 6, 문자는 유효하지 않은 점수로 처리하고 키보드로도 조작할 수 있게 해 줘." }
+    ],
+    checks: ["미응답을 0점으로 바꾸지 않는다", "가상 자료에서 메뉴 A 평균 4.0점, 3건이 나온다", "유효 응답이 없는 메뉴는 평균 0점이 아니라 계산 불가로 표시한다", "중복 클릭으로 같은 응답이 두 번 생성되지 않는다", "평균만 보고 응답 1건인 메뉴가 더 낫다고 단정하지 않는다", "시트로 보낼 때는 5단계와 같이 요청 ID로 한 건만 저장되는지 확인한다"],
+    code: `// 한 메뉴 응답 = 한 행 (긴 표)
+rows.push({ alias: "연습01", menu: "메뉴 A", score: 4 });
+rows.push({ alias: "연습01", menu: "메뉴 B", score: null }); // 빈칸
+
+// 평균은 유효 응답만으로
+const valid = rows.filter(r => r.menu === m && r.score !== null);
+const avg = valid.length ? sum(valid) / valid.length : null; // null이면 계산 불가
+show(\`\${m}: \${avg ?? "계산 불가"}, \${valid.length}건\`);` },
+  { id: "s9", name: "비슷한 급식 입맛 찾기", tags: ["학생 7차시"],
+    goal: "같은 메뉴 순서로 별점을 나열해 벡터로 만들고, 코사인 유사도로 방향을 비교합니다. 결과는 내 것만 확인하며 수치를 사람에 대한 평가로 바꾸지 않습니다.",
+    file: "급식_7차시_유사도.html",
+    added: ["모든 응답을 같은 메뉴 순서의 벡터로 정리", "곱의 합을 두 길이의 곱으로 나누는 코사인 계산 과정 표시", "두 사람이 모두 응답한 메뉴만 사용하고 미응답을 0점으로 바꾸지 않음", "공통 응답이 2개보다 적으면 계산하지 않음", "다른 사람의 별점과 이름은 보이지 않고 내 결과만 표시"],
+    prompts: [],
+    checks: ["예시에서 A와 B의 코사인 유사도는 0.9959, A와 C의 코사인 유사도는 0.5429로 나온다", "열 순서가 다른 표를 바로 비교하지 않는다", "미응답이 있으면 공통 응답 메뉴만으로 계산한다", "0.9959를 친구 관계나 건강 점수로 해석하지 않는다", "친구의 별점 전체나 순위를 공개하지 않는다", "사용한 메뉴 수와 공통 응답 수를 함께 기록한다"],
+    code: `// 같은 메뉴 순서의 두 벡터 (둘 다 응답한 메뉴만)
+const dot = a.reduce((s, x, i) => s + x * b[i], 0);   // 5×4 + 3×2 + 1×1 = 27
+const len = v => Math.sqrt(v.reduce((s, x) => s + x * x, 0));
+const cos = dot / (len(a) * len(b));                  // 27 / √735 ≈ 0.9959` },
+  { id: "s10", name: "가장 많이 남길 반찬 예측", tags: ["학생 8차시", "교원 9~10차시"],
+    goal: "메뉴 특성(튀김, 매운맛, 국류)을 입력으로, 규칙으로 만든 모의 잔반률을 정답으로 두고 학습 16행, 시험 4행으로 회귀 모델을 학습합니다. 시험 오차를 학습 평균만 예측하는 기준 모델의 시험 오차와 비교하고 계수를 해석합니다.",
+    file: "급식_메뉴특성_회귀실습 (브라우저판)",
+    added: ["실제 메뉴 원문을 보존한 채 특성 열을 만들고, 이름만으로 판단하기 어려우면 미확인", "입력 특성과 예측 대상(모의 잔반률)을 나누어 정의", "학습 자료와 시험 자료를 먼저 나누고 학습 자료로만 계수 계산", "시험 MAE를 기준 모델(학습 평균 예측)과 같은 시험 자료에서 비교", "계수를 %p 단위와 조건과 함께 해석"],
+    prompts: [],
+    checks: ["작은 예제: 학습 직선 10 − 2x, 시험 MAE 0.5%p, 기준 모델 2.5%p", "메뉴 특성 회귀: 절편 12, 튀김 +4, 매운맛 +3, 국류 −2", "시험 자료가 학습에 섞이지 않는다", "0.5%가 아니라 0.5%p로 읽는다", "모의 잔반과 실제 학교 결과를 구분하고 계수를 원인으로 단정하지 않는다", "API 메뉴만으로 실측 잔반 정답이 생기지 않는다"],
+    code: `// 정규방정식 (XᵀX) w = Xᵀy 로 계수를 구한다. X의 첫 열은 절편용 1
+const X = train.map(r => [1, r.fried, r.spicy, r.soup]);
+const w = solve(XtX(X), Xty(X, train.map(r => r.y)));
+const pred = r => w[0] + w[1]*r.fried + w[2]*r.spicy + w[3]*r.soup;
+
+const mae = rows => mean(rows.map(r => Math.abs(r.y - pred(r))));
+const base = mean(train.map(r => r.y));                 // 기준 모델
+const baseMae = mean(test.map(r => Math.abs(r.y - base)));` },
+  { id: "s11", name: "모델 검증과 한계", tags: ["학생 9차시"],
+    goal: "시험 자료는 고정하고 한 번에 한 조건만 바꾸어 학습 오차와 시험 오차를 함께 기록합니다. 과적합, 증강, 편향이 결과에 어떻게 드러나는지 확인합니다.",
+    file: "급식_9차시_비교실험.html",
+    added: ["학습 행 수, 사용 특성, 메뉴 이름 원핫, 같은 행 복사를 조건으로 바꾸는 실험", "실행할 때마다 학습 MAE와 시험 MAE를 같은 시험 4행으로 기록", "실험 기록표에 조건 하나와 결과 두 개를 남김", "최소 최대 변환 기준을 학습 자료에서 정하는 예시"],
+    prompts: [],
+    checks: ["한 번에 한 조건만 바꾸고 시험 자료는 그대로 둔다", "학습 오차가 줄었는데 시험 오차가 늘면 과적합을 의심한다", "같은 행을 복사해 늘리면 계수가 바뀌지 않음을 확인한다", "증강한 자료를 독립적인 실제 응답으로 세지 않는다", "좋은 결과만 골라 남기지 않는다", "시험값을 넣어 최솟값과 최댓값을 다시 계산하지 않는다"],
+    code: `// 같은 시험 4행에서 조건 하나만 바꿔 비교
+run({ rows: 16, features: ["fried", "spicy", "soup"] });   // 기본
+run({ rows: 8,  features: ["fried", "spicy", "soup"] });   // 자료 수만 변경
+run({ rows: 16, features: ["spicy", "soup"] });            // 특성 수만 변경
+run({ rows: 16, features: [...base, ...menuNameOneHot] }); // 학습은 거의 0, 시험은?
+
+// 최소 최대 변환은 학습 자료에서 기준을 정한다
+const scale = v => (v - trainMin) / (trainMax - trainMin);` },
+  { id: "s12", name: "식단 개선안 설계와 발표", tags: ["학생 10차시"],
+    goal: "앞 차시의 자료와 모델 기록을 근거로 사실, 해석, 제안, 먼저 확인할 것을 나누어 제안서를 씁니다. 가상값이나 모의 결과만 있으면 예비 제안으로 표시하고, 이해관계자와 동료 평가 기준으로 점검합니다.",
+    file: "급식_10차시_제안서.html",
+    added: ["앞 단계의 결과를 출처와 가상, 모의, 실제 여부와 함께 근거로 불러오기", "사실, 조심스러운 해석, 작은 제안, 먼저 확인 네 칸 문장 틀", "가상값이나 모의 근거를 쓰면 예비 제안으로 자동 표시", "단정 표현(반드시, 항상, 학교 전체 등) 찾기", "이해관계자 검토와 동료 평가 기준"],
+    prompts: [],
+    checks: ["확인한 사실에 자료, 기간, 건수가 들어 있다", "모의 결과를 학교 사실로 바꾸어 말하지 않는다", "'이 반찬이 반드시 남는다' 같은 단정을 피한다", "실제로 듣지 않은 관계자 의견을 들은 것처럼 쓰지 않는다", "특정 메뉴나 담당자를 비난하는 표현이 없다", "학교에서 시도하려면 먼저 확인할 조건을 적었다"],
+    code: null }
+];
+
+/* ---------- 레일 ---------- */
+const GROUPS = [
+  ["1마당. 내 입맛 데이터로 연습", "학생 1~4차시", ["s1", "s2", "s3", "s4", "s5", "s6"]],
+  ["2마당. 급식이라는 진짜 문제", "학생 5~9차시", ["s7", "s8", "s9", "s10", "s11"]],
+  ["3마당. 데이터로 학교 바꾸기", "학생 10차시", ["s12"]]
+];
+const railRoot = $("#rail");
+GROUPS.forEach(([label, range, ids]) => {
+  const rail = el("div", { class: "rail", role: "tablist", "aria-label": label });
+  ids.forEach(id => {
+    const s = STAGES.find(x => x.id === id), i = STAGES.indexOf(s);
+    rail.append(el("button", { class: "step", role: "tab", id: "tab-" + s.id, "aria-controls": "stage", "aria-selected": "false",
+      onclick: () => go(s.id, true) }, [
+      el("span", { class: "no", text: String(i + 1) }),
+      el("span", { class: "nm", text: s.name }),
+      el("span", { class: "ch" }, s.tags.map(t => el("span", { class: "chip" + (t.startsWith("교원") ? " t" : ""), text: t })))
+    ]));
+  });
+  railRoot.append(el("div", { class: "rg" }, [el("div", { class: "rg-label", text: `${label} (${range})` }), rail]));
+});
+
+/* ---------- 단계 화면 ---------- */
+const stageEl = $("#stage");
+let current = null;
+function go(id, push) {
+  const s = STAGES.find(x => x.id === id) || STAGES[0];
+  current = s.id;
+  STAGES.forEach(x => $("#tab-" + x.id).setAttribute("aria-selected", x.id === s.id ? "true" : "false"));
+  if (push) { try { history.replaceState(null, "", "#" + s.id); } catch (e) {} }
+  renderStage(s);
+}
+function renderStage(s) {
+  const idx = STAGES.indexOf(s);
+  const appBody = el("div", { class: "app", id: "app-" + s.id });
+  const left = el("div", { class: "col" }, [
+    el("div", { class: "appframe" }, [
+      el("div", { class: "appbar" }, [el("span", { class: "dot" }), el("span", { class: "dot" }), el("span", { class: "dot" }), el("span", { class: "fname", text: s.file })]),
+      appBody
+    ])
+  ]);
+  const right = el("div", { class: "col" });
+  right.append(el("div", { class: "panel" }, [
+    el("h3", {}, [idx === 0 ? "이 단계의 앱" : "이전 단계에 더한 것"]),
+    el("ul", { class: "added" }, s.added.map(t => el("li", { text: t })))
+  ]));
+  if (s.prompts.length) {
+    right.append(el("div", { class: "panel" }, [
+      el("h3", {}, ["AI에게 한 요청 ", el("small", { text: "검토본의 프롬프트 원문" })]),
+      ...s.prompts.map(p => {
+        const b = el("button", { class: "btn small", type: "button", text: "복사" });
+        b.addEventListener("click", () => copyText(p.text, b));
+        return el("div", { class: "prompt" }, [
+          el("div", { class: "ph" }, [el("span", {}, [p.title, " ", el("span", { class: "who", text: p.who })]), b]),
+          el("p", { text: p.text })
+        ]);
+      })
+    ]));
+  }
+  right.append(el("div", { class: "panel" }, [
+    el("h3", {}, ["확인할 것 ", el("small", { text: "직접 해 보며 체크" })]),
+    el("ul", { class: "checks" }, s.checks.map((t, i) => el("li", {}, el("label", { for: `${s.id}-c${i}` }, [el("input", { type: "checkbox", id: `${s.id}-c${i}` }), el("span", { text: t })]))))
+  ]));
+  if (s.code) right.append(el("div", { class: "panel" }, [
+    el("details", {}, [el("summary", { text: s.id === "s6" ? "스프레드시트로 같은 집계 하기" : "핵심 코드 읽기" }), el("pre", { class: "code" }, el("code", { text: s.code }))])
+  ]));
+
+  stageEl.replaceChildren(
+    el("div", { class: "stagehead" }, [
+      el("div", { class: "row" }, s.tags.map(t => el("span", { class: "chip" + (t.startsWith("교원") ? " t" : ""), text: t }))),
+      el("h2", { text: `${idx + 1}단계. ${s.name}` }),
+      el("p", { class: "goal", text: s.goal })
+    ]),
+    el("div", { class: "grid" }, [left, right])
+  );
+  APPS[s.id](appBody, left);
+}
+
+/* ---------- 공용: 설계 오류 안내 ---------- */
+function designGate(box) {
+  const v = validate(design.candidates);
+  if (v.ok) return v.clean;
+  box.replaceChildren(el("div", { class: "alert", role: "alert" }, [
+    "설계 메모의 후보를 먼저 고쳐야 경기를 시작할 수 있습니다.",
+    el("ul", {}, v.errs.map(e => el("li", { text: e })))
+  ]), el("div", { class: "row c" }, [
+    el("button", { class: "btn", type: "button", text: "1단계 설계 메모로 가기", onclick: () => go("s1", true) }),
+    el("button", { class: "btn", type: "button", text: "예시 후보로 되돌리기", onclick: () => { design = structuredClone(EXAMPLE); saveDesign(); go(current); } })
+  ]));
+  return null;
+}
+
+/* ---------- 공용: 토너먼트 화면 ---------- */
+function mountTournament(box, opt) {
+  // opt: candidates, title, chickenLabels, reason, debug, record, send
+  let g = newGame(opt.candidates);
+  let run = null;
+  let reasonVal = "";
+
+  function labelFor(rs, m) {
+    if (!opt.chickenLabels) return `${roundName(rs)} ${m}경기`;
+    if (rs === 8) return "8강 " + "①②③④"[m - 1];
+    if (rs === 4) return "4강 " + "가나"[m - 1];
+    return "결승";
+  }
+  function start() {
+    if (sending) return;   // 전송 중에는 새 경기로 넘어가지 않는다
+    g = newGame(opt.candidates);
+    run = opt.record ? { runId: "run-" + rid().slice(0, 8), alias: randomAlias(), topic: design.topic, version: "v01", choices: [], winner: null } : null;
+    render();
+  }
+  function pick(side) {
+    const extra = opt.reason ? { reason: reasonVal.trim() } : {};
+    if (!choose(g, side, extra)) return;
+    reasonVal = "";
+    if (run) {
+      const c = g.log[g.log.length - 1];
+      run.choices.push({ roundSize: c.roundSize, match: c.match, left: c.left, right: c.right, selected: c.selected });
+      if (g.done) { run.winner = g.champion; saveRun(structuredClone(run)); opt.onRecord && opt.onRecord(run); }
+    }
+    render();
+    // 새 화면이 그려진 뒤에만 다시 입력을 받는다
+    const painted = g;
+    // 화면이 숨겨진 탭에서도 풀리도록 requestAnimationFrame 대신 짧은 타이머를 쓴다
+    setTimeout(() => {
+      if (g !== painted) return;
+      g.busy = false;
+      box.querySelectorAll(".cand").forEach(b => { b.disabled = false; });
+      if (opt.debug) opt.debug(g);
+    }, 60);
+  }
+  function render() {
+    const nodes = [el("div", { class: "app-title", text: opt.title })];
+    if (run) nodes.push(el("p", { class: "notice", text: `이번 회차 표식: ${run.alias} (무작위 별명, 실명과 연결하지 않음) / 회차 ID ${run.runId}` }));
+    if (!g.done) {
+      const rs = g.currentRound.length, m = g.matchIndex / 2 + 1;
+      const L = g.currentRound[g.matchIndex], R = g.currentRound[g.matchIndex + 1];
+      const lb = el("button", { class: "cand", type: "button", onclick: () => pick(0) }, [L, el("span", { class: "k", text: "왼쪽" })]);
+      const rb = el("button", { class: "cand", type: "button", onclick: () => pick(1) }, [R, el("span", { class: "k", text: "오른쪽" })]);
+      if (g.busy) { lb.disabled = true; rb.disabled = true; }
+      nodes.push(
+        el("div", { class: "round", text: `${labelFor(rs, m)}  (${g.log.length + 1}/7번째 선택)` }),
+        el("div", { class: "progress", "aria-hidden": "true" }, el("span", { style: `width:${(g.log.length / 7) * 100}%` })),
+        el("div", { class: "match" }, [lb, el("span", { class: "vs", text: "vs" }), rb])
+      );
+      if (opt.reason) {
+        const inp = el("input", { type: "text", id: "reason-input", placeholder: "예: 바삭한 식감을 좋아해서", value: reasonVal, maxlength: "40" });
+        inp.addEventListener("input", e => reasonVal = e.target.value);
+        nodes.push(el("div", { class: "field" }, [el("label", { for: "reason-input", text: "선택 이유 메모 (자율, 고르기 전에 적기)" }), inp]));
+      }
+    } else {
+      nodes.push(el("div", { class: "champ" }, [
+        el("span", { class: "crown", text: "오늘 나의 우승 항목" }),
+        el("span", { class: "name", text: g.champion }),
+        el("span", { class: "notice", text: `선택 ${g.log.length}건으로 우승 1개가 남았습니다.` })
+      ]));
+      if (opt.reason) {
+        nodes.push(el("div", { class: "tablewrap" }, el("table", {}, [
+          el("thead", {}, el("tr", {}, [el("th", { text: "라운드" }), el("th", { text: "선택 항목" }), el("th", { text: "선택 이유" })])),
+          el("tbody", {}, g.log.map(c => el("tr", {}, [el("td", { text: labelFor(c.roundSize, c.match) }), el("td", { text: c.selected }), el("td", { text: c.reason || "(적지 않음)" })])))
+        ])));
+      }
+      if (opt.send) nodes.push(opt.send(run));
+      nodes.push(el("div", { class: "row c" }, el("button", { class: "btn primary", type: "button", text: "다시하기", onclick: start })));
+    }
+    box.replaceChildren(...nodes);
+    if (opt.debug) opt.debug(g);
+    if (opt.after) opt.after(g);
+  }
+  start();
+  return { restart: start, game: () => g };
+}
+
+/* ---------- 각 단계의 앱 ---------- */
+const APPS = {};
+
+APPS.s1 = (box, col) => {
+  const chicken = ["후라이드", "양념", "간장", "허니", "마늘", "매콤", "치즈", "숯불"];
+  const holder = el("div", { style: "display:grid;gap:14px" });
+  box.append(
+    el("p", { class: "notice", text: "규칙: 두 항목 중 하나를 고릅니다. 선택한 항목만 다음 라운드에 올라가고, 7번 선택하면 우승 항목 1개가 남습니다. 후보는 수업용 예시이며 브랜드, 사진, 실제 구매 정보는 사용하지 않습니다." }),
+    holder
+  );
+  mountTournament(holder, { candidates: chicken, title: "치킨 월드컵", chickenLabels: true, reason: true });
+
+  // 설계 메모
+  const memo = el("div", { class: "panel" });
+  const ins = [];
+  function field(id, label, key, ph) {
+    const i = el("input", { type: "text", id, value: design[key], placeholder: ph });
+    i.addEventListener("input", () => { design[key] = i.value; saveDesign(); });
+    ins.push(i);
+    return el("div", { class: "field" }, [el("label", { for: id, text: label }), i]);
+  }
+  const candBoxes = design.candidates.slice(0, 8).concat(Array(Math.max(0, 8 - design.candidates.length)).fill("")).map((c, i) => {
+    const inp = el("input", { type: "text", id: `memo-c${i}`, value: c, "aria-label": `후보 ${i + 1}` });
+    inp.addEventListener("input", () => {
+      const arr = [...memo.querySelectorAll(".cands8 input")].map(x => x.value);
+      design.candidates = arr; saveDesign(); updateMemoState();
+    });
+    return inp;
+  });
+  const state = el("div", {});
+  function updateMemoState() {
+    const v = validate(design.candidates);
+    state.replaceChildren(v.ok ? el("div", { class: "okbox", text: `후보 8개가 준비되었습니다. 2단계부터 "${design.topic} 월드컵"으로 앱이 만들어집니다.` })
+                               : el("div", { class: "alert" }, [el("ul", {}, v.errs.map(e => el("li", { text: e })))]));
+  }
+  memo.append(
+    el("h3", {}, ["내 주제 설계 메모 ", el("small", { text: "1차시 산출물, 다음 차시 앱의 재료" })]),
+    el("p", { class: "notice", text: "예시: 학교에서 먹고 싶은 과일. 새로 만든 수업용 예시이며 실제 설문 결과가 아닙니다. 지금은 코드를 만들지 않고 생각을 구체화합니다. 메모는 이 브라우저에만 저장되니 이름, 학번, 연락처, 건강정보는 적지 않습니다." }),
+    el("div", { class: "two" }, [field("memo-topic", "내 주제", "topic", "예: 과일"), field("memo-crit", "선택 기준", "criterion", "예: 지금 먹고 싶은 마음으로")]),
+    field("memo-q", "알아보고 싶은 질문", "question", "예: 학교 간식으로 어떤 과일을 더 좋아할까?"),
+    el("div", { class: "field" }, [el("label", { text: "후보 8개 (같은 범주, 구체적인 이름, 중복 없음)" }), el("div", { class: "cands8" }, candBoxes)]),
+    state,
+    el("div", { class: "row" }, el("button", { class: "btn small", type: "button", text: "과일 예시로 되돌리기", onclick: () => { design = structuredClone(EXAMPLE); saveDesign(); go("s1"); } }))
+  );
+  updateMemoState();
+  col.append(memo);
+};
+
+APPS.s2 = (box, col) => {
+  // 설계 메모를 그대로 검사한다. 잘못된 후보를 예시로 몰래 바꾸지 않는다
+  let test = design.candidates.slice();
+  const base = (validate(design.candidates).ok ? validate(design.candidates).clean : EXAMPLE.candidates).slice();
+  const codeView = el("pre", { class: "code" });
+  const screen = el("div", { style: "display:grid;gap:14px" });
+  function draw() {
+    codeView.replaceChildren(el("code", { text: "const candidates = [" + test.map(x => JSON.stringify(x)).join(", ") + "];" }));
+    const v = validate(test);
+    if (!v.ok) {
+      screen.replaceChildren(el("div", { class: "app-title", text: `${design.topic} 월드컵` }),
+        el("div", { class: "alert", role: "alert" }, ["경기를 시작하지 않습니다. 아래 조건에 맞게 후보를 고쳐 주세요.", el("ul", {}, v.errs.map(e => el("li", { text: e })))]));
+      return;
+    }
+    const pair = v.clean.slice(0, 2);
+    const result = el("p", { class: "result", role: "status", text: "두 후보 중 하나를 고르세요." });
+    const mk = (name, side) => el("button", { class: "cand", type: "button", onclick: () => { result.replaceChildren("선택한 후보: ", el("b", { text: name })); } }, [name, el("span", { class: "k", text: side })]);
+    screen.replaceChildren(
+      el("div", { class: "app-title", text: `${design.topic} 월드컵` }),
+      el("div", { class: "round", text: "한 경기 (다음 경기 연결은 3단계)" }),
+      el("div", { class: "match" }, [mk(pair[0], "candidates[0]"), el("span", { class: "vs", text: "vs" }), mk(pair[1], "candidates[1]")]),
+      result
+    );
+  }
+  const tests = [
+    ["정상 배열", () => base.slice()],
+    ["첫 후보를 청사과로", () => { const t = base.slice(); t[0] = "청" + t[0]; return t; }],
+    ["후보 7개", () => base.slice(0, 7)],
+    ["빈 이름 포함", () => { const t = base.slice(); t[3] = "  "; return t; }],
+    ["첫 후보가 두 번", () => { const t = base.slice(); t[5] = t[0]; return t; }]
+  ];
+  box.append(screen);
+  col.append(el("div", { class: "panel" }, [
+    el("h3", {}, ["배열 바꿔 시험하기 ", el("small", { text: "화면은 배열을 읽어 표시만 한다" })]),
+    codeView,
+    el("div", { class: "row" }, tests.map(([label, fn]) => el("button", { class: "btn small", type: "button", text: label, onclick: () => { test = fn(); draw(); } }))),
+    el("p", { class: "notice", text: "시험을 마치면 정상 배열로 되돌립니다. 이 시험은 설계 메모를 바꾸지 않습니다." })
+  ]));
+  draw();
+};
+
+function debugTable(g) {
+  const rows = [
+    ["현재 후보 currentRound", g.currentRound.join(", ")],
+    ["다음 승자 winners", g.winners.join(", ") || "(없음)"],
+    ["경기 위치 matchIndex", g.done ? "(종료)" : `${g.matchIndex}: ${g.currentRound[g.matchIndex]}과 ${g.currentRound[g.matchIndex + 1]}`],
+    ["선택 기록 수", g.log.length + "건"],
+    ["busy", String(g.busy)]
+  ];
+  return el("div", { class: "tablewrap" }, el("table", { class: "state" }, el("tbody", {}, rows.map(r => el("tr", {}, [el("td", { text: r[0] }), el("td", { class: "mono", text: r[1] })])))));
+}
+
+APPS.s3 = (box, col) => {
+  const cands = designGate(box); if (!cands) return;
+  const dbg = el("div", {});
+  const results = el("div", { style: "display:grid;gap:6px" });
+  mountTournament(box, { candidates: cands, title: `${design.topic} 월드컵`, debug: g => dbg.replaceChildren(debugTable(g)) });
+
+  function runPath(side) {
+    const g = newGame(cands); let after8 = null;
+    while (!g.done) { choose(g, side); g.busy = false; if (!after8 && g.currentRound.length === 4 && g.winners.length === 0) after8 = { n: g.currentRound.length, idx: g.matchIndex, list: g.currentRound.slice() }; }
+    return { g, after8 };
+  }
+  function line(name, expect, actual, pass) {
+    return el("div", { class: "row" }, [el("span", { class: "pill " + (pass ? "ok" : "bad"), text: pass ? "통과" : "다름" }), el("span", {}, [el("b", { text: name }), ` 기대: ${expect} / 실제: ${actual}`])]);
+  }
+  const tests = {
+    left() {
+      const { g, after8 } = runPath(0);
+      const exp8 = [cands[0], cands[2], cands[4], cands[6]];
+      return [line("항상 왼쪽", `우승 ${cands[0]}, 선택 7건`, `우승 ${g.champion}, 선택 ${g.log.length}건`, g.champion === cands[0] && g.log.length === 7),
+              line("8강 마친 순간", `후보 4개 [${exp8.join(", ")}], 위치 0`, `후보 ${after8.n}개 [${after8.list.join(", ")}], 위치 ${after8.idx}`, after8.n === 4 && after8.idx === 0 && after8.list.join() === exp8.join())];
+    },
+    right() {
+      const { g } = runPath(1);
+      return [line("항상 오른쪽", `우승 ${cands[7]}, 선택 7건`, `우승 ${g.champion}, 선택 ${g.log.length}건`, g.champion === cands[7] && g.log.length === 7)];
+    },
+    double() {
+      const g = newGame(cands);
+      choose(g, 0); choose(g, 0);           // 같은 경기에 빠른 두 번 클릭
+      const n1 = g.log.length;
+      g.busy = false; choose(g, 1);         // 새 화면이 그려진 뒤의 정상 클릭
+      return [line("빠른 두 번 클릭", "첫 경기 기록 1건, 다음 경기 클릭은 정상 처리", `첫 경기 기록 ${n1}건, 이어서 ${g.log.length}건`, n1 === 1 && g.log.length === 2)];
+    },
+    restart() {
+      const g0 = runPath(0).g; const before = cands.join();
+      const g = newGame(g0.original);
+      return [line("우승 후 다시하기", "8개 후보, 선택 기록 0건, 원본 배열 그대로", `${g.currentRound.length}개 후보, 선택 기록 ${g.log.length}건, 원본 ${cands.join() === before ? "그대로" : "바뀜"}`, g.currentRound.length === 8 && g.log.length === 0 && cands.join() === before)];
+    }
+  };
+  col.append(el("div", { class: "panel" }, [
+    el("h3", {}, ["교사 디버그 영역 ", el("small", { text: "선택할 때마다 세 상태가 바뀌는 모습" })]),
+    dbg
+  ]), el("div", { class: "panel" }, [
+    el("h3", {}, ["시험 시나리오 자동 실행 ", el("small", { text: "무작위 대진을 켜기 전의 결정적 시험" })]),
+    el("div", { class: "row" }, [
+      el("button", { class: "btn small", type: "button", text: "항상 왼쪽", onclick: () => results.replaceChildren(...tests.left()) }),
+      el("button", { class: "btn small", type: "button", text: "항상 오른쪽", onclick: () => results.replaceChildren(...tests.right()) }),
+      el("button", { class: "btn small", type: "button", text: "빠른 두 번 클릭", onclick: () => results.replaceChildren(...tests.double()) }),
+      el("button", { class: "btn small", type: "button", text: "다시하기 초기화", onclick: () => results.replaceChildren(...tests.restart()) }),
+      el("button", { class: "btn small primary", type: "button", text: "전체 실행", onclick: () => results.replaceChildren(...tests.left(), ...tests.right(), ...tests.double(), ...tests.restart()) })
+    ]),
+    results
+  ]));
+};
+
+function runsPanel() {
+  const panel = el("div", { class: "panel" });
+  function draw() {
+    const confirmBox = el("div", { class: "row" });
+    const clearBtn = el("button", { class: "btn small", type: "button", text: "연습 기록 지우기", onclick: () => {
+      confirmBox.replaceChildren(el("span", { text: "이 앱의 기록(meal_worldcup_v1)만 지웁니다. 지울까요?" }),
+        el("button", { class: "btn small primary", type: "button", text: "지우기", onclick: () => {
+          const ok = store.remove(RUNS_KEY);
+          if (ok) { runsState.runs = []; runsState.locked = false; }
+          runsState.level = ok ? "ok" : "bad"; runsState.status = ok ? "이 앱의 연습 기록을 지웠습니다." : "기록을 지우지 못했습니다. 저장소 접근이 막혀 있어 기존 기록과 보호 상태를 그대로 둡니다."; draw(); } }),
+        el("button", { class: "btn small", type: "button", text: "취소", onclick: () => confirmBox.replaceChildren() }));
+    } });
+    const runs = runsState.runs;
+    const last = runs[runs.length - 1];
+    panel.replaceChildren(
+      el("h3", {}, ["저장된 완료 회차 ", el("small", { text: "localStorage, 키 meal_worldcup_v1" })]),
+      el("div", { class: runsState.level === "ok" ? "okbox" : "alert", role: "status", text: runsState.status }),
+      el("p", { class: "notice", text: "저장 위치는 이 브라우저입니다. 외부로 전송하지 않으며, 다른 브라우저에는 보이지 않습니다. 공용 기기에서는 다음 사용자에게 보일 수 있으니 연습이 끝나면 지웁니다." }),
+      runs.length ? el("div", { class: "tablewrap" }, el("table", {}, [
+        el("thead", {}, el("tr", {}, ["회차 ID", "표식", "주제", "버전", "우승", "선택 수"].map(h => el("th", { class: h === "선택 수" ? "num" : null, text: h })))),
+        el("tbody", {}, runs.map((r, i) => el("tr", { class: i === runs.length - 1 ? "fresh" : null }, [
+          el("td", { class: "mono", text: r.runId }), el("td", { text: r.alias }), el("td", { text: r.topic }), el("td", { text: r.version }),
+          el("td", { text: r.winner ?? "(미완료)" }), el("td", { class: "num", text: String(r.choices?.length ?? 0) })])))
+      ])) : null,
+      last ? el("details", {}, [el("summary", { text: "마지막 회차의 기록 형태(JSON)" }), el("pre", { class: "code" }, el("code", { text: JSON.stringify(last, null, 1) }))]) : null,
+      el("div", { class: "row" }, [clearBtn, confirmBox])
+    );
+  }
+  draw();
+  return { panel, draw };
+}
+
+APPS.s4 = (box, col) => {
+  const cands = designGate(box); if (!cands) return;
+  loadRuns();
+  const rp = runsPanel();
+  mountTournament(box, { candidates: cands, title: `${design.topic} 월드컵`, record: true, onRecord: () => rp.draw() });
+  col.append(rp.panel);
+};
+
+APPS.s5 = (box, col) => {
+  const cands = designGate(box); if (!cands) return;
+  loadRuns();
+  const sheetBox = el("div", {});
+  let freshId = null;
+  const expectInp = el("input", { type: "number", id: "expect-n", min: "0", value: "6", style: "max-width:90px" });
+
+  // 한 요청을 보내고 결과를 status에 표시한다. 실패하면 pendingVotes에 남겨 같은 ID로 재시도한다
+  function sendPending(entry, btn, status) {
+    if (sending) return;
+    const pending = entry.payload;
+    sending = true; btn.disabled = true; status.textContent = "저장 확인 중";
+    pendingVotes.set(pending.requestId, entry);
+    callSaveVote(pending).then(res => {
+      if (!res || res.ok !== true || res.requestId !== pending.requestId) return fail("응답 형식이 다릅니다");
+      sending = false; pendingVotes.delete(pending.requestId);
+      lastPendingMsg = res.duplicate ? `ID ${pending.requestId.slice(0, 8)}…: 이미 저장된 같은 요청입니다. 행이 늘지 않았는지 시트에서 확인하세요.` : `ID ${pending.requestId.slice(0, 8)}…: 저장 응답을 받았습니다.`;
+      freshId = res.requestId; drawSheet(); drawPending();
+      status.replaceChildren(el("span", { class: "pill ok", text: res.duplicate ? "중복" : "저장" }), " ",
+        res.duplicate ? "이미 저장된 같은 요청입니다. 시트에서 한 행인지 확인하세요." : "저장 응답을 받았습니다. 시트에서 한 행인지 확인하세요.");
+      btn.textContent = "저장 완료";
+    }, err => fail(err.message));
+    function fail(why) {
+      sending = false; btn.disabled = false; btn.textContent = "같은 요청 재시도";
+      status.replaceChildren(el("span", { class: "pill bad", text: "확인 못 함" }), ` 저장 결과를 확인하지 못했습니다(${why}). 시트를 먼저 확인한 뒤 같은 요청으로 재시도하세요.`);
+      drawSheet(); drawPending();
+    }
+  }
+  function sendCard(run) {
+    let entry = [...pendingVotes.values()].find(p => p.runId === run.runId) || null;
+    const status = el("p", { class: "result", role: "status", text: entry ? "확인하지 못한 요청이 있습니다. 같은 요청으로 재시도하세요." : "결과를 시트로 보내기 전입니다." });
+    const btn = el("button", { class: "btn primary", type: "button", text: entry ? "같은 요청 재시도" : "한 건 저장" });
+    btn.addEventListener("click", () => {
+      // pending은 한 번만 만들고, 재시도 때도 같은 requestId를 사용한다
+      if (!entry) entry = { runId: run.runId, payload: { requestId: rid(), alias: run.alias, topic: run.topic, winner: run.winner } };
+      sendPending(entry, btn, status);
+    });
+    return el("div", { class: "panel", style: "background:var(--bg)" }, [
+      el("div", { class: "tablewrap" }, el("table", {}, el("tbody", {}, [["보낼 값", "requestId, alias, topic, winner"], ["표식", run.alias], ["주제", run.topic], ["우승", run.winner]].map(r => el("tr", {}, [el("td", { text: r[0] }), el("td", { text: r[1] })]))))),
+      el("div", { class: "row c" }, btn), status
+    ]);
+  }
+
+  function checks() {
+    const n = sheet.length;
+    const blank = sheet.filter(r => !String(r[3] || "").trim()).length;
+    const ids = new Set(sheet.map(r => r[0]));
+    const off = sheet.filter(r => !cands.includes(r[3]) || r[2] !== design.topic).length;
+    const exp = Number(expectInp.value) || 0;
+    const item = (ok, t) => el("li", { class: "row" }, [el("span", { class: "pill " + (ok ? "ok" : "wait"), text: ok ? "확인" : "살펴보기" }), el("span", { text: t })]);
+    return el("ul", { class: "checks" }, [
+      item(n === exp, `예상 참가 ${exp}건, 실제 기록 ${n}건`),
+      item(blank === 0, `빈 우승 후보 ${blank}건 (끝까지 참여했는지 확인)`),
+      item(ids.size === n, `같은 요청 ID 반복 ${n - ids.size}건 (이중 클릭, 재전송 여부)`),
+      item(off === 0, `지금 후보 목록과 다른 표기 또는 다른 주제 ${off}건`)
+    ]);
+  }
+
+  function drawSheet() {
+    const confirmBox = el("div", { class: "row" });
+    sheetBox.replaceChildren(
+      el("div", { class: "tablewrap" }, el("table", {}, [
+        el("thead", {}, el("tr", {}, [el("th", { text: "" }), ...HEADERS.map(h => el("th", { text: h }))])),
+        el("tbody", {}, sheet.length ? sheet.map((r, i) => el("tr", { class: r[0] === freshId ? "fresh" : null }, [el("td", { class: "num", text: String(i + 2) }), ...r.map((c, j) => el("td", { class: j === 0 || j === 4 ? "mono" : null, text: j === 0 ? String(c).slice(0, 13) + (String(c).length > 13 ? "…" : "") : j === 4 ? String(c).slice(5, 19).replace("T", " ") : c }))]))
+                                  : el("tr", {}, el("td", { colspan: "6", text: "아직 행이 없습니다. 왼쪽에서 결승까지 마치고 한 건 저장을 누르세요." })))
+      ])),
+      el("p", { class: "notice", text: `results 탭, 머리글 제외 데이터 ${sheet.length}행` }),
+      sheetLocked ? el("div", { class: "alert", text: "저장된 모의 시트를 복원하지 못해 원문을 보호하고 있습니다. 새 행은 화면에만 남습니다. 모의 시트 비우기에 성공하면 다시 저장합니다." }) : null,
+      el("div", { class: "field" }, [el("label", { for: "expect-n", text: "예상 참가 수" }), expectInp]),
+      checks(),
+      el("div", { class: "row" }, [
+        el("button", { class: "btn small", type: "button", text: "가상 6건 넣기", onclick: () => {
+          ["사과", "사과", "귤", "배", "사과", "귤"].forEach((w, i) => {
+            const win = cands.includes(w) ? w : cands[[0, 0, 2, 1, 0, 2][i]];
+            try { saveVoteOn(sheet, { requestId: "demo-seed-" + rid().slice(0, 8), alias: "연습" + ALPHA[i], topic: design.topic, winner: win }); } catch (e) {}
+          });
+          saveSheet(); drawSheet(); } }),
+        el("button", { class: "btn small", type: "button", text: "모의 시트 비우기", onclick: () => {
+          confirmBox.replaceChildren(el("span", { text: "모의 시트의 모든 행을 지울까요?" }),
+            el("button", { class: "btn small primary", type: "button", text: "비우기", onclick: () => {
+              if (store.remove(SHEET_KEY)) { sheet = []; sheetLocked = false; freshId = null; }
+              drawSheet(); } }),
+            el("button", { class: "btn small", type: "button", text: "취소", onclick: () => confirmBox.replaceChildren() }));
+        } }),
+        confirmBox
+      ])
+    );
+  }
+  expectInp.addEventListener("input", drawSheet);
+
+  // 네 가지 가상 요청 시험 (빈 시험용 시트에서)
+  const fourOut = el("div", { style: "display:grid;gap:6px" });
+  function runFour() {
+    const rows = []; const a = cands[0], b = cands[1];
+    const reqs = [
+      ["새 ID, 연습A, " + a, { requestId: "demo-run-0001", alias: "연습A", topic: design.topic, winner: a }, "새 행 1개, duplicate=false", (r, d) => d === 1 && r && r.duplicate === false],
+      ["같은 ID와 같은 값", { requestId: "demo-run-0001", alias: "연습A", topic: design.topic, winner: a }, "새 행 0개, duplicate=true", (r, d) => d === 0 && r && r.duplicate === true],
+      ["같은 ID, 우승만 " + b + "(으)로", { requestId: "demo-run-0001", alias: "연습A", topic: design.topic, winner: b }, "REQUEST_CONFLICT, 새 행 0개", (r, d, e) => d === 0 && e === "REQUEST_CONFLICT"],
+      ["새 ID, 연습B, " + b, { requestId: "demo-run-0002", alias: "연습B", topic: design.topic, winner: b }, "새 행 1개, 기존 값 유지", (r, d) => d === 1 && rows[0][3] === a]
+    ];
+    fourOut.replaceChildren(...reqs.map(([name, p, exp, judge]) => {
+      const before = rows.length; let res = null, err = null;
+      try { res = saveVoteOn(rows, p); } catch (e) { err = e.message; }
+      const d = rows.length - before;
+      const actual = err ? `${err}, 새 행 ${d}개` : `새 행 ${d}개, duplicate=${res.duplicate}`;
+      const pass = judge(res, d, err);
+      return el("div", { class: "row" }, [el("span", { class: "pill " + (pass ? "ok" : "bad"), text: pass ? "통과" : "다름" }), el("span", {}, [el("b", { text: name }), ` 기대: ${exp} / 실제: ${actual}`])]);
+    }));
+  }
+
+  const failBox = el("input", { type: "checkbox", id: "net-fail" });
+  failBox.checked = net.failBefore;
+  failBox.addEventListener("change", () => net.failBefore = failBox.checked);
+  const loseBox = el("input", { type: "checkbox", id: "net-lose" });
+  loseBox.checked = net.loseReply;
+  loseBox.addEventListener("change", () => net.loseReply = loseBox.checked);
+
+  mountTournament(box, { candidates: cands, title: `${design.topic} 월드컵`, record: true, send: sendCard });
+
+  // 확인하지 못한 요청: 새 경기로 넘어가도 같은 requestId로 다시 확인할 수 있게 남긴다
+  const pendingBox = el("div", {});
+  function drawPending() {
+    const list = [...pendingVotes.values()];
+    if (!list.length) { pendingBox.replaceChildren(lastPendingMsg ? el("div", { class: "okbox", role: "status", text: lastPendingMsg }) : ""); return; }
+    pendingBox.replaceChildren(el("div", { class: "panel" }, [
+      el("h3", {}, ["확인하지 못한 요청 ", el("small", { text: "같은 requestId로만 재시도" })]),
+      ...list.map(entry => {
+        const st = el("span", { class: "notice", text: `${entry.payload.alias}, 우승 ${entry.payload.winner}, ID ${entry.payload.requestId.slice(0, 8)}…` });
+        const b = el("button", { class: "btn small", type: "button", text: "같은 요청 재시도" });
+        b.addEventListener("click", () => sendPending(entry, b, st));
+        return el("div", { class: "row" }, [b, st]);
+      })
+    ]));
+  }
+
+  col.append(
+    el("div", { class: "panel" }, [
+      el("h3", { text: "연동의 원리" }),
+      el("div", { class: "flow" }, [
+        el("div", {}, [el("b", { text: "앱" }), "수집할 값과 전송 요청 만들기"]),
+        el("div", {}, [el("b", { text: "웹앱" }), "받은 값 검사, 중복 처리, 저장 요청"]),
+        el("div", {}, [el("b", { text: "시트" }), "합의한 열과 권한으로 기록 보관"])
+      ]),
+      el("p", { class: "notice", text: "이 페이지의 웹앱과 시트는 브라우저 안에서 Code.gs의 검사 규칙을 그대로 흉내 낸 모의 환경입니다. 실제 구글 시트로 전송하지 않습니다." }),
+      el("ul", { class: "checks" }, [
+        el("li", {}, el("label", { for: "net-fail" }, [failBox, el("span", { text: "연결 실패 만들기 (저장 전에 실패)" })])),
+        el("li", {}, el("label", { for: "net-lose" }, [loseBox, el("span", { text: "응답 유실 만들기 (저장은 되었는데 응답이 오지 않음)" })]))
+      ]),
+      el("p", { class: "notice", text: "응답 유실을 켜고 저장한 뒤 끄고 재시도하면, 같은 요청 ID라서 행이 하나만 남는 것을 확인할 수 있습니다." })
+    ]),
+    pendingBox,
+    el("div", { class: "panel" }, [el("h3", {}, ["모의 시트 ", el("small", { text: "새로 생긴 행은 노란색" })]), sheetBox]),
+    el("div", { class: "panel" }, [
+      el("h3", {}, ["네 가지 가상 요청 ", el("small", { text: "빈 시험용 시트에서 순서대로" })]),
+      el("div", { class: "row" }, el("button", { class: "btn small primary", type: "button", text: "순서대로 보내기", onclick: runFour })),
+      fourOut
+    ])
+  );
+  drawSheet(); drawPending();
+};
+
+APPS.s6 = (box, col) => {
+  const cands = designGate(box); if (!cands) return;
+  const SAMPLE = ["사과", "사과", "귤", "배", "사과", "귤"].map((w, i) => cands.includes(w) ? w : cands[[0, 0, 2, 1, 0, 2][i]]);
+  let src = "sample";
+  const out = el("div", { style: "display:grid;gap:14px" });
+  const r1 = el("input", { type: "radio", name: "src", id: "src-sample", checked: true });
+  const r2 = el("input", { type: "radio", name: "src", id: "src-sheet" });
+  r1.addEventListener("change", () => { src = "sample"; draw(); });
+  r2.addEventListener("change", () => { src = "sheet"; draw(); });
+  const sentences = {};
+
+  function draw() {
+    const winners = src === "sample" ? SAMPLE : sheet.filter(r => r[2] === design.topic).map(r => r[3]);
+    const n = winners.length;
+    const label = src === "sample" ? `가상 ${design.topic} 월드컵 우승 빈도(n=${n})` : `모의 시트 ${design.topic} 월드컵 우승 빈도(n=${n})`;
+    const counts = cands.map(c => ({ c, k: winners.filter(w => w === c).length })).sort((a, b) => b.k - a.k || cands.indexOf(a.c) - cands.indexOf(b.c));
+    const sum = counts.reduce((s, x) => s + x.k, 0);
+    const pct = k => n ? (k / n * 100) : 0;
+    const fmtPct = k => { const p = pct(k); return Number.isInteger(p) ? `${p}%` : `약 ${Math.round(p)}%`; };
+    if (!n) {
+      out.replaceChildren(el("div", { class: "app-title", text: label }),
+        el("div", { class: "alert", text: "모의 시트에 이 주제의 기록이 없습니다. 5단계에서 결과를 저장하거나 가상 6건을 넣은 뒤 다시 보세요." }));
+      return;
+    }
+    const maxK = Math.max(1, ...counts.map(x => x.k));
+    // 막대그래프 (세로, 0부터)
+    const W = 560, H = 260, padL = 40, padB = 46, padT = 26, padR = 10;
+    const plotW = W - padL - padR, plotH = H - padT - padB;
+    const step = maxK <= 5 ? 1 : Math.ceil(maxK / 5);
+    const top = Math.ceil(maxK / step) * step;
+    const y = v => padT + plotH - (v / top) * plotH;
+    const bw = plotW / counts.length;
+    const ns = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(ns, "svg");
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("class", "chart"); svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", label + ", " + counts.map(x => `${x.c} ${x.k}건`).join(", "));
+    svg.style.width = "100%"; svg.style.height = "auto";
+    const add = (tag, at, txt) => { const e = document.createElementNS(ns, tag); for (const k in at) e.setAttribute(k, at[k]); if (txt != null) e.textContent = txt; svg.append(e); return e; };
+    for (let v = 0; v <= top; v += step) {
+      add("line", { x1: padL, x2: W - padR, y1: y(v), y2: y(v), class: v === 0 ? "axis" : "grid" });
+      add("text", { x: padL - 8, y: y(v) + 4, "text-anchor": "end" }, String(v));
+    }
+    add("text", { x: padL - 30, y: padT - 10 }, "우승 횟수(건)");
+    counts.forEach((x, i) => {
+      const cx = padL + bw * i + bw / 2, w = Math.min(46, bw * .62);
+      if (x.k > 0) add("rect", { x: cx - w / 2, y: y(x.k), width: w, height: y(0) - y(x.k), rx: 3, class: "bar" + (x.k === maxK ? " top" : "") });
+      add("text", { x: cx, y: y(x.k) - 6, "text-anchor": "middle", class: "val" }, String(x.k));
+      add("text", { x: cx, y: H - padB + 18, "text-anchor": "middle" }, x.c.length > 5 ? x.c.slice(0, 5) + "…" : x.c);
+    });
+
+    const topK = counts[0];
+    const obs = `${src === "sample" ? "가상 응답" : "모의 시트 기록"} ${n}건 중 ${topK.c}의 우승은 ${topK.k}건이다.`;
+    const sField = (key, title, ph) => {
+      const i = el("input", { type: "text", id: "sent-" + key, value: sentences[key] || "", placeholder: ph });
+      i.addEventListener("input", () => sentences[key] = i.value);
+      return el("div", { class: "field" }, [el("label", { for: "sent-" + key }, [el("b", { text: title }), " "]), i]);
+    };
+    out.replaceChildren(
+      el("div", { class: "app-title", style: "font-size:20px", text: label }),
+      svg,
+      el("div", { class: "tablewrap" }, el("table", {}, [
+        el("thead", {}, el("tr", {}, [el("th", { text: "후보" }), el("th", { class: "num", text: "우승 횟수" }), el("th", { class: "num", text: `전체 ${n}건 중 비율` })])),
+        el("tbody", {}, [...counts.map(x => el("tr", {}, [el("td", { text: x.c }), el("td", { class: "num", text: String(x.k) }), el("td", { class: "num", text: fmtPct(x.k) })])),
+          ...(sum < n ? [el("tr", {}, [el("td", { text: "후보 목록 밖" }), el("td", { class: "num", text: String(n - sum) }), el("td", { class: "num", text: fmtPct(n - sum) })])] : []),
+          el("tr", {}, [el("td", { text: "합계" }), el("td", { class: "num", text: String(n) }), el("td", { class: "num", text: "100%" })])])
+      ])),
+      el("div", { class: sum === n ? "okbox" : "alert", text: sum === n ? `막대 합계 ${sum}건이 원본 ${n}건과 같습니다.` : `막대 합계 ${sum}건이 원본 ${n}건과 다릅니다. 후보 목록에 없는 이름이 섞였는지 확인하세요.` }),
+      el("div", { class: "panel", style: "background:var(--bg)" }, [
+        el("h3", {}, ["세 문장으로 해석하기 ", el("small", { text: "자료 밖의 사실을 보태지 않기" })]),
+        el("div", { class: "sentences" }, [
+          el("div", { class: "field" }, [el("label", {}, el("b", { text: "관찰" })), el("p", { text: obs })]),
+          sField("cmp", "비교", "내 예상 [내용]과 비교하면 [같은 점, 다른 점]"),
+          sField("lim", "한계", "[대상, 대진, 표본 수] 때문에 [범위]는 말하기 어렵다"),
+          sField("more", "추가 확인", "다음에는 [어떤 자료]를 더 모으고 싶다")
+        ]),
+        el("p", { class: "notice", text: `예: ${obs.replace("이다.", "이지만")} '학교에서 가장 인기'인지는 아직 모릅니다. 다른 학생, 다른 대진표에서는 달라질 수 있습니다.` })
+      ])
+    );
+  }
+  box.append(el("div", { class: "row" }, [
+    el("label", { for: "src-sample", class: "row" }, [r1, "가상 6건 예시"]),
+    el("label", { for: "src-sheet", class: "row" }, [r2, "5단계 모의 시트의 기록"])
+  ]), el("p", { class: "notice", text: "모의 시트의 기록은 주제 이름으로만 묶습니다. 후보나 선택 기준을 바꿨다면 규칙이 다른 기록이 섞이므로 5단계에서 시트를 비우고 새로 모읍니다." }), out);
+  draw();
+
+  // 유사도 개념 연결 (교원 7차시)
+  const ns = "http://www.w3.org/2000/svg";
+  const sv = document.createElementNS(ns, "svg");
+  sv.setAttribute("viewBox", "0 0 260 230"); sv.setAttribute("class", "chart"); sv.setAttribute("role", "img");
+  sv.setAttribute("aria-label", "가상 별점 벡터 P(5,1), Q(4,1), R(1,5)의 방향 비교");
+  sv.style.width = "100%"; sv.style.maxWidth = "320px"; sv.style.height = "auto";
+  const o = { x: 40, y: 190 }, u = 30;
+  const a = (tag, at, txt) => { const e = document.createElementNS(ns, tag); for (const k in at) e.setAttribute(k, at[k]); if (txt != null) e.textContent = txt; sv.append(e); return e; };
+  for (let i = 0; i <= 5; i++) {
+    a("line", { x1: o.x + i * u, x2: o.x + i * u, y1: o.y, y2: o.y - 5 * u, class: "grid" });
+    a("line", { x1: o.x, x2: o.x + 5 * u, y1: o.y - i * u, y2: o.y - i * u, class: "grid" });
+    a("text", { x: o.x + i * u, y: o.y + 16, "text-anchor": "middle" }, String(i));
+    if (i) a("text", { x: o.x - 10, y: o.y - i * u + 4, "text-anchor": "end" }, String(i));
+  }
+  a("text", { x: o.x + 5 * u, y: o.y + 34, "text-anchor": "end" }, "메뉴 A 별점");
+  a("text", { x: 4, y: 22 }, "메뉴 B 별점");
+  const defs = document.createElementNS(ns, "defs");
+  defs.innerHTML = '<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker>';
+  sv.prepend(defs);
+  [["P", 5, 1, "var(--accent)"], ["Q", 4, 1, "var(--accent)"], ["R", 1, 5, "var(--yolk)"]].forEach(([nm, x, yv, c]) => {
+    const g = document.createElementNS(ns, "g"); g.setAttribute("style", `color:${c}`);
+    const ln = document.createElementNS(ns, "line");
+    Object.entries({ x1: o.x, y1: o.y, x2: o.x + x * u, y2: o.y - yv * u, stroke: "currentColor", "stroke-width": 2.5, "marker-end": "url(#ah)" }).forEach(([k, v]) => ln.setAttribute(k, v));
+    const t = document.createElementNS(ns, "text");
+    Object.entries({ x: o.x + x * u + (nm === "Q" ? -2 : 6), y: o.y - yv * u + (nm === "Q" ? 16 : -4), class: "val" }).forEach(([k, v]) => t.setAttribute(k, v));
+    t.textContent = `${nm}(${x},${yv})`;
+    g.append(ln, t); sv.append(g);
+  });
+  col.append(el("div", { class: "panel" }, [
+    el("h3", {}, ["유사도 개념 연결 ", el("small", { text: "교원 7차시, 계산 도구는 만들지 않음" })]),
+    sv,
+    el("p", { text: "같은 메뉴 순서로 별점을 나열하면 방향을 비교할 수 있습니다. 메뉴 A를 상대적으로 높게 평가한 P와 Q는 방향이 비슷하고 R은 다릅니다." }),
+    el("p", { class: "notice", text: "P와 Q의 방향이 비슷하다는 것은 이번 메뉴 응답에만 해당합니다. 성격이나 친밀도를 뜻하지 않습니다. 코사인 계산은 학생 7차시에서 다룹니다." })
+  ]));
+};
+
+/* ==========================================================
+   5~10차시 공용 자료
+   ========================================================== */
+const SNAP_AT = "2026-11-04 22:05 KST";
+const SNAP_SRC = "NEIS 교육정보 개방 포털, 급식식단정보(mealServiceDietInfo), 인증키 없는 공개 조회";
+const R = (ymd, fgr, dish, cal) => ({ ATPT_OFCDC_SC_CODE: "B10", SD_SCHUL_CODE: "7010073", SCHUL_NM: "당곡고등학교", MMEAL_SC_CODE: "2", MMEAL_SC_NM: "중식", MLSV_YMD: ymd, MLSV_FGR: fgr, DDISH_NM: dish, CAL_INFO: cal });
+const SNAP = [
+  R("20261026", 770.0, "친환경현미밥 <br/>참치김치찌개 (5.6.9.13)<br/>연근조림 (5.6.13)<br/>매운갈비찜 (5.6.10.13)<br/>야채달걀말이 (1)<br/>총각김치 (9)<br/>귤 ", "817.9 Kcal"),
+  R("20261027", 770.0, "비건햄김치볶음밥 (5.6.9)<br/>가쓰오브시국 (5.6.9.13)<br/>달걀찜 (1.13)<br/>진미채고추장볶음 (6.13.17)<br/>생선까스&콘소스 (1.2.5.6.13)<br/>깍두기 (9)<br/>바나나우유 (2)", "789.8 Kcal"),
+  R("20261028", 340.0, "친환경보리밥 <br/>소고기무국 (16)<br/>마늘쫑무침 (6.13)<br/>낙지야채볶음 (5.6.13)<br/>꽃전 (1.5.6.10.16)<br/>배추김치 (9)<br/>미니도넛 (1.2.5.6)", "819.6 Kcal"),
+  R("20261029", 340.0, "소시지달걀볶음밥 (1.2.5.6.10.13.15.16.18)<br/>돈육고추장찌개 (5.6.10.13)<br/>치킨샐러드&허니머스터드S (1.2.5.6.15.16)<br/>숙주나물무침 <br/>배추김치 (9)<br/>포도주스 (2.5)", "760.8 Kcal"),
+  R("20261030", 340.0, "단호박카레라이스 (2.5.6.10.12.13.16.18)<br/>팽이장국 (5.6.13)<br/>타워함박스테이크 (1.2.5.6.10.12.13.15.16)<br/>배추김치 (9)<br/>감말랭이야채샐러드 (1.2.5.6)", "838.9 Kcal"),
+  R("20261102", 770.0, "친환경칼슘기장밥 <br/>바지락미역국 (5.6.13.18)<br/>시금치나물 <br/>닭볶음탕 (5.6.13.15)<br/>어묵볶음 (5.6.13.18)<br/>배추김치 (9)<br/>조각케이크 (1.2.6)", "836.9 Kcal"),
+  R("20261103", 770.0, "낙지볶음밥 (2.5.6.16)<br/>미소국 (5.6)<br/>도토리묵&양념장 (5.6.13)<br/>사과 <br/>달걀후라이 (1)<br/>레몬크림깐쇼새우 (1.2.5.6.9.13)<br/>깍두기 (9)", "820.3 Kcal")
+];
+const SNAP_OCT = [
+  R("20261001", 770.0, "친환경칼슘기장밥 <br/>육개장 (1.5.6.13.15.16)<br/>제육볶음 (6.10.13)<br/>타코야끼 (1.2.5.6.10.15.16.18)<br/>배추김치 (9)<br/>레몬에이드 <br/>오이&쌈장 (5.6)", "784.2 Kcal"),
+  R("20261002", 770.0, "추가밥 <br/>미니한우쌀국수 (2.5.6.13.16)<br/>공심채볶음 (5.6.13.18)<br/>새우튀김&칠리소스 (6.9.12)<br/>배추김치 (9)<br/>에그타르트 (1.2.5.6.16)", "822.8 Kcal"),
+  R("20261014", 770.0, "친환경칼슘기장밥 <br/>돈육감자탕 (5.6.10.13.16)<br/>오징어초무침 (6.17)<br/>미니돈가스&파채 (5.6.10.13.16)<br/>배식용김 <br/>석박지 (9)<br/>청포도 ", "624.9 Kcal"),
+  R("20261015", 770.0, "친환경현미밥 <br/>햄찌개 (1.2.5.6.9.10.13.15.16)<br/>돈육메추리알조림 (1.5.6.10.13)<br/>고등어무조림 (5.6.7.13)<br/>시금치나물 <br/>깍두기 (9)<br/>사과생크림와플 (2.5.6)", "991.0 Kcal"),
+  R("20261016", 770.0, "후리가케밥 (1.2.5.6.9.13.16.18)<br/>고명유부국 (1.2.5.6.9.13)<br/>꼬들단무지무침 <br/>떡볶이 (2.5.6.16)<br/>버터갈릭감자튀김 (2.5.6.16)<br/>배추김치 (9)<br/>요구르트 (5.6.10)", "817.4 Kcal")
+];
+const okResp = (rows, total) => ({ mealServiceDietInfo: [{ head: [{ list_total_count: total ?? rows.length }, { RESULT: { CODE: "INFO-000", MESSAGE: "정상 처리되었습니다." } }] }, { row: rows }] });
+function snapResponse(q) {
+  if (q.missing) return { RESULT: { CODE: "ERROR-300", MESSAGE: "필수 값이 누락되어 있습니다. 요청인자를 참고 하십시오." } };
+  if (q.from === "20261001" && q.to === "20261031") return okResp(SNAP_OCT, 15);
+  const rows = SNAP.filter(r => r.MLSV_YMD >= q.from && r.MLSV_YMD <= q.to);
+  if (rows.length) return okResp(rows.slice(0, 5), rows.length);
+  if (q.from === "20261101") return { RESULT: { CODE: "INFO-200", MESSAGE: "해당하는 데이터가 없습니다." } };
+  return undefined;   // 스냅샷에 없는 조건
+}
+const splitMenu = raw => String(raw || "").split(/<br\s*\/?>/i).map(s => s.trim()).filter(Boolean);
+const cleanDish = s => s.replace(/\s*\([0-9.]+\)\s*$/, "").trim();
+const fmtYmd = y => `${y.slice(0, 4)}-${y.slice(4, 6)}-${y.slice(6, 8)}`;
+
+// 6~7차시 별점 자료 (가상 응답만)
+const VOTES_KEY = "meal_votes_demo";
+const PRACTICE = ["메뉴 A", "메뉴 B", "메뉴 C"];
+let votes = (() => {
+  const g = store.get(VOTES_KEY);
+  if (g.ok && g.raw) { try { const v = JSON.parse(g.raw); if (v && typeof v === "object" && !Array.isArray(v)) return v; } catch (e) {} }
+  return {};
+})();
+const saveVotes = () => store.set(VOTES_KEY, JSON.stringify(votes));
+function menuSets() {
+  const sets = [{ key: "practice", label: "연습 메뉴 A, B, C (가상)", menus: PRACTICE }];
+  SNAP.forEach(r => sets.push({ key: "d" + r.MLSV_YMD, label: `${fmtYmd(r.MLSV_YMD)} 당곡고 중식 (실제 메뉴)`, menus: splitMenu(r.DDISH_NM).map(cleanDish) }));
+  return sets;
+}
+let voteSetKey = "practice";
+const setRows = key => (votes[key] = votes[key] || []);
+function aggregate(key, menus) {
+  const rows = setRows(key);
+  return menus.map(m => {
+    const valid = rows.filter(r => r.menu === m && typeof r.score === "number");
+    const blank = rows.filter(r => r.menu === m && r.score === null).length;
+    return { m, n: valid.length, blank, avg: valid.length ? valid.reduce((s, r) => s + r.score, 0) / valid.length : null };
+  });
+}
+
+// 8~9차시 회귀 (모의 잔반률)
+function solve(A, b) {
+  const n = b.length, M = A.map((r, i) => [...r, b[i]]);
+  for (let c = 0; c < n; c++) {
+    let p = c;
+    for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    [M[c], M[p]] = [M[p], M[c]];
+    if (Math.abs(M[c][c]) < 1e-12) return null;
+    for (let r = 0; r < n; r++) {
+      if (r === c) continue;
+      const f = M[r][c] / M[c][c];
+      for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k];
+    }
+  }
+  return M.map((r, i) => r[n] / r[i]);
+}
+function fitLinear(X, y, lam = 0) {
+  const p = X[0].length, A = Array.from({ length: p }, () => Array(p).fill(0)), b = Array(p).fill(0);
+  X.forEach((x, i) => { for (let a = 0; a < p; a++) { b[a] += x[a] * y[i]; for (let c = 0; c < p; c++) A[a][c] += x[a] * x[c]; } });
+  for (let a = 1; a < p; a++) A[a][a] += lam;   // 절편에는 벌점을 주지 않는다
+  return solve(A, b);
+}
+const dotv = (w, x) => w.reduce((s, wi, i) => s + wi * x[i], 0);
+const meanOf = a => a.reduce((s, x) => s + x, 0) / a.length;
+const RULE = (f, s, u) => 12 + 4 * f + 3 * s - 2 * u;
+const COMBOS = [[0, 0, 0, .5], [1, 0, 0, 1], [0, 1, 0, .5], [0, 0, 1, 1], [1, 1, 0, .5], [1, 0, 1, 1], [0, 1, 1, .5], [1, 1, 1, 1]];
+const TRAIN = [1, -1].flatMap((sg, h) => COMBOS.map(([f, s, u, e], i) => ({ name: `가상 메뉴 ${h * 8 + i + 1}`, fried: f, spicy: s, soup: u, y: RULE(f, s, u) + sg * e })));
+const TEST = [[1, 1, 0, -.5], [0, 0, 1, .5], [1, 0, 1, .5], [0, 1, 1, -.5]].map(([f, s, u, e], i) => ({ name: `시험 메뉴 ${i + 1}`, fried: f, spicy: s, soup: u, y: RULE(f, s, u) + e }));
+const FEAT_LABEL = { fried: "튀김 여부", spicy: "매운맛 여부", soup: "국류 여부" };
+function runExp({ rows = 16, feats = ["fried", "spicy", "soup"], onehot = false, aug = false } = {}) {
+  let tr = TRAIN.slice(0, rows);
+  if (aug) tr = tr.concat(tr.map(r => ({ ...r })));
+  const names = onehot ? [...new Set(tr.map(r => r.name))] : [];
+  const vec = r => [1, ...feats.map(k => r[k]), ...names.map(n => r.name === n ? 1 : 0)];
+  const w = fitLinear(tr.map(vec), tr.map(r => r.y), onehot ? 1e-3 : 0);
+  if (!w) return null;
+  const base = meanOf(tr.map(r => r.y));
+  return {
+    w, feats, names, n: tr.length,
+    trMae: meanOf(tr.map(r => Math.abs(r.y - dotv(w, vec(r))))),
+    teMae: meanOf(TEST.map(r => Math.abs(r.y - dotv(w, vec(r))))),
+    baseMae: meanOf(TEST.map(r => Math.abs(r.y - base))),
+    preds: TEST.map(r => dotv(w, vec(r))), base
+  };
+}
+const pp = (v, d = 2) => (Math.round(v * 10 ** d) / 10 ** d).toString();
+const signed = v => (v >= 0 ? "+" : "−") + pp(Math.abs(v));
+
+// 메뉴 이름으로 특성 만들기 (교원 9차시): 이름만으로 정하기 어려우면 미확인
+const FEATURE_RULES = {
+  fried: { yes: /까스|가스|튀김|깐쇼|강정|탕수|도넛|타코야끼/, unsure: /후라이|전$|치킨/ },
+  spicy: { yes: /매운|매콤|고추장|떡볶이|육개장|제육/, unsure: /김치|낙지|닭볶음탕|칠리|석박지|깍두기/ },
+  soup: { yes: /국$|국수$|찌개|장국|탕$/, unsure: /볶음탕/ }
+};
+function featureOf(name, key) {
+  const r = FEATURE_RULES[key];
+  if (r.unsure.test(name)) return "미확인";
+  return r.yes.test(name) ? 1 : 0;
+}
+
+/* ---------- 7단계: 급식 API 수집 (학생 5차시) ---------- */
+let apiRows = [];      // 표에 추가한 수집 결과
+APPS.s7 = (box, col) => {
+  let reqNo = 0, ctrl = null;
+  const dateIn = el("input", { type: "date", id: "api-date", value: "2026-11-03", min: "2026-01-01", max: "2026-12-31" });
+  const statusEl = el("div", { role: "status" });
+  const out = el("div", { style: "display:grid;gap:12px" });
+  const tableBox = el("div", {});
+  const ymd = () => (dateIn.value || "").replaceAll("-", "");
+  const urlFor = q => "https://open.neis.go.kr/hub/mealServiceDietInfo?Type=json&ATPT_OFCDC_SC_CODE=B10"
+    + (q.missing ? "" : "&SD_SCHUL_CODE=7010073") + "&MMEAL_SC_CODE=2" + (q.missing ? `&MLSV_YMD=${q.from}` : `&MLSV_FROM_YMD=${q.from}&MLSV_TO_YMD=${q.to}`);
+  const setStatus = (kind, text) => statusEl.replaceChildren(el("div", { class: kind === "ok" ? "okbox" : kind === "bad" ? "alert" : "notice" }, text));
+
+  function show(q, data, mode, at) {
+    const src = el("div", { class: "tablewrap" }, el("table", { class: "state" }, el("tbody", {}, [
+      ["모드", mode === "live" ? "실시간 조회" : `저장된 실데이터 (조회 시각 ${SNAP_AT}, 최신 조회가 아님)`],
+      ["조회 시각", at], ["제공 기관", SNAP_SRC], ["요청 주소", urlFor(q)]
+    ].map(r => el("tr", {}, [el("td", { text: r[0] }), el("td", { class: "mono", style: "white-space:normal;word-break:break-all", text: r[1] })])))));
+    const raw = el("details", {}, [el("summary", { text: "응답 원문(JSON) 보기" }), el("pre", { class: "code" }, el("code", { text: JSON.stringify(data, null, 1) }))]);
+    if (data.RESULT) {
+      const code = data.RESULT.CODE;
+      if (code === "INFO-200") setStatus("info", [el("span", { class: "pill wait", text: "자료 없음" }), ` INFO-200: 이 조건의 자료가 없습니다. 잔반 0이나 휴교를 뜻하지 않습니다.`]);
+      else setStatus("bad", [el("span", { class: "pill bad", text: "오류" }), ` ${code}: ${data.RESULT.MESSAGE} 성공 결과와 구분해 기록합니다.`]);
+      out.replaceChildren(src, raw); return;
+    }
+    const [head, body] = data.mealServiceDietInfo;
+    const total = head.head[0].list_total_count, rows = body.row;
+    const cut = total > rows.length;
+    setStatus(cut ? "info" : "ok", [el("span", { class: "pill " + (cut ? "wait" : "ok"), text: cut ? "잘림" : "정상" }),
+      cut ? ` INFO-000이지만 전체 ${total}건 중 ${rows.length}건만 받았습니다. 인증키 없는 조회의 첫 5건 제한이며 전체 기간 수집이 아닙니다.` : ` INFO-000, ${rows.length}건을 받았습니다.`]);
+    const tbl = el("div", { class: "tablewrap" }, el("table", {}, [
+      el("thead", {}, el("tr", {}, ["급식일", "식사", "메뉴 원문(DDISH_NM)", "정리한 메뉴", "열량", "급식인원수"].map(h => el("th", { text: h })))),
+      el("tbody", {}, rows.map(r => el("tr", {}, [
+        el("td", { text: fmtYmd(r.MLSV_YMD) }), el("td", { text: r.MMEAL_SC_NM }),
+        el("td", { class: "mono", style: "white-space:normal;min-width:220px", text: r.DDISH_NM }),
+        el("td", { style: "white-space:normal;min-width:160px", text: splitMenu(r.DDISH_NM).map(cleanDish).join(", ") }),
+        el("td", { text: r.CAL_INFO }), el("td", { class: "num", text: r.MLSV_FGR == null ? "미확인" : String(r.MLSV_FGR) })])))
+    ]));
+    const addBtn = el("button", { class: "btn small", type: "button", text: "정리 표에 추가", onclick: () => {
+      rows.forEach(r => { if (!apiRows.some(x => x.MLSV_YMD === r.MLSV_YMD)) apiRows.push({ ...r, _mode: mode, _at: at }); });
+      apiRows.sort((a, b) => a.MLSV_YMD.localeCompare(b.MLSV_YMD)); drawTable(); } });
+    out.replaceChildren(tbl, el("p", { class: "notice", text: "급식인원수(MLSV_FGR)는 응답에 적힌 인원 값이며 실제 출석이나 잔반을 뜻하지 않습니다. 알레르기 번호를 지운 정리 열은 분석용이며 안전 안내에는 원문을 사용합니다." }), el("div", { class: "row" }, addBtn), src, raw);
+  }
+  function fromSnapshot(q, why) {
+    const data = snapResponse(q);
+    if (data === undefined) { setStatus("bad", [el("span", { class: "pill bad", text: "없음" }), ` ${why ? why + " " : ""}저장된 실데이터에 이 날짜가 없습니다. 2026-10-26~30, 11-01~03 또는 10월 전체로 시험하세요.`]); out.replaceChildren(); return; }
+    show(q, data, "snapshot", SNAP_AT);
+    if (why) statusEl.prepend(el("p", { class: "notice", text: why }));
+  }
+  async function live(q) {
+    if (ctrl) ctrl.abort();
+    const my = ++reqNo; ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort("timeout"), 15000);
+    setStatus("info", [el("span", { class: "pill wait", text: "조회 중" }), " NEIS에 요청을 보냈습니다. 결과를 기다리는 동안 같은 버튼을 반복해 누르지 않습니다."]);
+    try {
+      const res = await fetch(urlFor(q), { signal: ctrl.signal });
+      const data = await res.json();
+      if (my !== reqNo) return;                 // 늦게 온 응답은 무시
+      clearTimeout(timer); show(q, data, "live", new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) + " KST");
+    } catch (e) {
+      clearTimeout(timer);
+      if (my !== reqNo) return;
+      if (ctrl.signal.aborted && ctrl.signal.reason !== "timeout") { setStatus("info", [el("span", { class: "pill wait", text: "취소" }), " 조회를 취소했습니다. 늦게 도착한 응답은 화면에 반영하지 않습니다."]); return; }
+      fromSnapshot(q, ctrl.signal.reason === "timeout" ? "15초 안에 응답이 없어 저장된 실데이터를 대신 보여 줍니다." : "이 화면에서는 외부 조회가 막혀 있거나 연결에 실패했습니다. 아래는 저장된 실데이터입니다. 실제 조회는 HTML 파일을 내려받아 브라우저에서 직접 열어 확인합니다.");
+    }
+  }
+  const cancel = () => { if (ctrl) { reqNo++; ctrl.abort(); setStatus("info", [el("span", { class: "pill wait", text: "취소" }), " 조회를 취소했습니다. 늦게 도착한 응답은 화면에 반영하지 않습니다."]); } };
+  function drawTable() {
+    tableBox.replaceChildren(apiRows.length ? el("div", { class: "panel" }, [
+      el("h3", {}, ["출처를 붙인 급식 정리 표 ", el("small", { text: `${apiRows.length}일` })]),
+      el("div", { class: "tablewrap" }, el("table", {}, [
+        el("thead", {}, el("tr", {}, ["급식일", "메뉴 수", "열량", "급식인원수", "가져온 방법"].map(h => el("th", { text: h })))),
+        el("tbody", {}, apiRows.map(r => el("tr", {}, [el("td", { text: fmtYmd(r.MLSV_YMD) }), el("td", { class: "num", text: String(splitMenu(r.DDISH_NM).length) }), el("td", { text: r.CAL_INFO }), el("td", { class: "num", text: String(r.MLSV_FGR ?? "미확인") }), el("td", { text: r._mode === "live" ? `실시간 ${r._at}` : `저장본 ${r._at}` })])))
+      ])),
+      el("p", { class: "notice", text: "응답이 없는 날은 0이 아니라 표에서 빠진 날로 남깁니다. 반환된 날짜 수와 중복 행을 확인합니다." })
+    ]) : null);
+  }
+
+  box.append(
+    el("div", { class: "tablewrap" }, el("table", {}, [
+      el("thead", {}, el("tr", {}, ["요청 인자", "뜻", "이번 활동"].map(h => el("th", { text: h })))),
+      el("tbody", {}, [["Type", "응답 형식", "json"], ["ATPT_OFCDC_SC_CODE", "시도교육청코드", "B10 (서울)"], ["SD_SCHUL_CODE", "학교 행정표준코드", "7010073 (당곡고등학교)"], ["MMEAL_SC_CODE", "식사 코드", "2 (중식)"], ["MLSV_FROM_YMD, MLSV_TO_YMD", "급식일자 시작, 종료", "아래에서 고른 하루"]]
+        .map(r => el("tr", {}, r.map((c, i) => el("td", { class: i === 0 ? "mono" : null, text: c })))))
+    ])),
+    el("div", { class: "row" }, [el("label", { for: "api-date", text: "급식일" }), dateIn]),
+    el("div", { class: "row" }, [
+      el("button", { class: "btn primary", type: "button", text: "NEIS 실데이터 조회", onclick: () => live({ from: ymd(), to: ymd() }) }),
+      el("button", { class: "btn", type: "button", text: "조회 취소", onclick: cancel }),
+      el("button", { class: "btn", type: "button", text: "저장된 실데이터 열기", onclick: () => fromSnapshot({ from: ymd(), to: ymd() }) })
+    ]),
+    el("div", { class: "row" }, [
+      el("span", { class: "notice", text: "상태 시험" }),
+      el("button", { class: "btn small", type: "button", text: "11월 1일 (자료 없음)", onclick: () => { dateIn.value = "2026-11-01"; fromSnapshot({ from: "20261101", to: "20261101" }); } }),
+      el("button", { class: "btn small", type: "button", text: "학교 코드 빼기 (필수 인자 누락)", onclick: () => fromSnapshot({ from: ymd(), to: ymd(), missing: true }) }),
+      el("button", { class: "btn small", type: "button", text: "10월 전체 (무키 잘림)", onclick: () => fromSnapshot({ from: "20261001", to: "20261031" }) })
+    ]),
+    statusEl, out
+  );
+  col.append(el("div", { class: "panel" }, [
+    el("h3", {}, ["검토본과 다른 값 ", el("small", { text: "공개 응답은 바뀔 수 있음" })]),
+    el("p", { text: "검토본에는 2026-11-03 18:08 KST 조회에서 확인한 11월 3일 중식 열량이 817.2 Kcal로 기록되어 있습니다. 이 페이지의 저장본(2026-11-04 22:05 KST 조회)에서는 같은 날이 820.3 Kcal입니다. 수업 자료에는 조회 시각을 함께 적고, 수업 직전에 다시 확인합니다." })
+  ]), tableBox);
+  drawTable();
+  fromSnapshot({ from: "20261103", to: "20261103" });
+};
+
+/* ---------- 8단계: 급식 선호도 별점 앱 (학생 6차시) ---------- */
+APPS.s8 = (box, col) => {
+  const sets = menuSets();
+  const sel = el("select", { id: "vote-set", class: "btn" }, sets.map(s => el("option", { value: s.key, text: s.label })));
+  sel.value = voteSetKey;
+  const formBox = el("div", { style: "display:grid;gap:12px" });
+  const aggBox = el("div", {});
+  let locked = false;
+  sel.addEventListener("change", () => { voteSetKey = sel.value; drawForm(); drawAgg(); });
+  const cur = () => sets.find(s => s.key === voteSetKey) || sets[0];
+  const nextAlias = () => "연습" + String(new Set(setRows(voteSetKey).map(r => r.alias)).size + 1).padStart(2, "0");
+
+  function drawForm() {
+    const set = cur(), alias = nextAlias();
+    const answers = {};
+    const items = set.menus.map((m, i) => {
+      const name = `v-${i}`;
+      const opts = [1, 2, 3, 4, 5].map(v => el("label", { class: "row", style: "gap:3px" }, [el("input", { type: "radio", name, value: String(v), onchange: () => answers[m] = v }), String(v)]));
+      const none = el("label", { class: "row", style: "gap:3px" }, [el("input", { type: "radio", name, value: "none", onchange: () => answers[m] = "none" }), "먹어 보지 않음"]);
+      const skip = el("label", { class: "row", style: "gap:3px" }, [el("input", { type: "radio", name, value: "skip", checked: true, onchange: () => delete answers[m] }), "응답하지 않음"]);
+      return el("fieldset", { style: "border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:0" }, [
+        el("legend", { style: "font-weight:700;padding:0 4px", text: m }), el("div", { class: "row" }, [...opts, none, skip])]);
+    });
+    const confirmBox = el("div", {});
+    const submit = el("button", { class: "btn primary", type: "button", text: "제출 전 확인" });
+    submit.addEventListener("click", () => {
+      const summary = set.menus.map(m => `${m}: ${typeof answers[m] === "number" ? answers[m] + "점" : "빈칸"}`).join(", ");
+      const ok = el("button", { class: "btn primary", type: "button", text: "이대로 한 번 기록" });
+      ok.addEventListener("click", () => {
+        if (locked) return; locked = true; ok.disabled = true;
+        set.menus.forEach(m => setRows(voteSetKey).push({ alias, menu: m, score: typeof answers[m] === "number" ? answers[m] : null }));
+        saveVotes();
+        setTimeout(() => { locked = false; drawForm(); drawAgg(); }, 300);
+      });
+      confirmBox.replaceChildren(el("div", { class: "panel", style: "background:var(--yolk-soft)" }, [
+        el("p", {}, [el("b", { text: `${alias} 응답 요약` }), ` ${summary}`]),
+        el("div", { class: "row" }, [ok, el("button", { class: "btn", type: "button", text: "고치기", onclick: () => confirmBox.replaceChildren() })])
+      ]));
+    });
+    formBox.replaceChildren(
+      el("div", { class: "app-title", style: "font-size:22px", text: "급식 선호도 조사" }),
+      el("p", { class: "notice", text: `응답 표식 ${alias} (실명 없이 자동 부여). 질문: 이 메뉴를 얼마나 좋아하나요? 1 전혀 좋아하지 않음, 5 매우 좋아함. 점수는 선호 응답이며 잔반 실측값이 아닙니다.` }),
+      ...items, el("div", { class: "row c" }, submit), confirmBox);
+  }
+  function drawAgg() {
+    const set = cur(), rows = setRows(voteSetKey), agg = aggregate(voteSetKey, set.menus);
+    const sorted = agg.slice().sort((a, b) => (b.avg ?? -1) - (a.avg ?? -1));
+    const confirmBox = el("div", { class: "row" });
+    aggBox.replaceChildren(el("div", { class: "panel" }, [
+      el("h3", {}, ["메뉴별 평균과 응답 수 ", el("small", { text: `응답자 ${new Set(rows.map(r => r.alias)).size}명` })]),
+      el("div", { class: "tablewrap" }, el("table", {}, [
+        el("thead", {}, el("tr", {}, ["메뉴", "평균", "유효 응답", "빈칸"].map((h, i) => el("th", { class: i ? "num" : null, text: h })))),
+        el("tbody", {}, sorted.map(a => el("tr", {}, [el("td", { text: a.m }), el("td", { class: "num", text: a.avg == null ? "계산 불가" : a.avg.toFixed(1) + "점" }), el("td", { class: "num", text: a.n + "건" }), el("td", { class: "num", text: String(a.blank) })])))
+      ])),
+      el("p", { class: "notice", text: "응답 수가 적은 메뉴의 평균은 변동 폭이 큽니다. 숫자만으로 메뉴나 조리하신 분을 평가하지 않습니다." }),
+      el("details", {}, [el("summary", { text: `저장된 긴 표 (${rows.length}행)` }), el("div", { class: "tablewrap" }, el("table", {}, [
+        el("thead", {}, el("tr", {}, ["응답 표식", "메뉴", "점수"].map(h => el("th", { text: h })))),
+        el("tbody", {}, rows.map(r => el("tr", {}, [el("td", { text: r.alias }), el("td", { text: r.menu }), el("td", { text: r.score == null ? "빈칸" : String(r.score) })])))
+      ]))]),
+      el("div", { class: "row" }, [
+        voteSetKey === "practice" ? el("button", { class: "btn small", type: "button", text: "검토본 가상 응답 넣기", onclick: () => {
+          votes.practice = [["연습01", 4, null, 2], ["연습02", 5, 5, 1], ["연습03", 3, null, 4]].flatMap(([a, ...s]) => PRACTICE.map((m, i) => ({ alias: a, menu: m, score: s[i] })));
+          saveVotes(); drawForm(); drawAgg(); } }) : null,
+        el("button", { class: "btn small", type: "button", text: "이 메뉴 묶음의 응답 비우기", onclick: () => {
+          confirmBox.replaceChildren(el("span", { text: "이 메뉴 묶음의 가상 응답을 모두 지울까요?" }),
+            el("button", { class: "btn small primary", type: "button", text: "지우기", onclick: () => { votes[voteSetKey] = []; saveVotes(); drawForm(); drawAgg(); } }),
+            el("button", { class: "btn small", type: "button", text: "취소", onclick: () => confirmBox.replaceChildren() }));
+        } }), confirmBox
+      ])
+    ]));
+  }
+  box.append(el("div", { class: "row" }, [el("label", { for: "vote-set", text: "메뉴 묶음" }), sel]), formBox);
+  col.append(aggBox);
+  if (voteSetKey === "practice" && !setRows("practice").length) {
+    votes.practice = [["연습01", 4, null, 2], ["연습02", 5, 5, 1], ["연습03", 3, null, 4]].flatMap(([a, ...s]) => PRACTICE.map((m, i) => ({ alias: a, menu: m, score: s[i] })));
+  }
+  drawForm(); drawAgg();
+};
+
+/* ---------- 9단계: 비슷한 급식 입맛 찾기 (학생 7차시) ---------- */
+function cosine(a, b) {
+  const dot = a.reduce((s, x, i) => s + x * b[i], 0);
+  const la = Math.sqrt(a.reduce((s, x) => s + x * x, 0)), lb = Math.sqrt(b.reduce((s, x) => s + x * x, 0));
+  return la && lb ? { dot, la2: a.reduce((s, x) => s + x * x, 0), lb2: b.reduce((s, x) => s + x * x, 0), cos: dot / (la * lb) } : null;
+}
+APPS.s9 = (box, col) => {
+  // 계산 예시 (검토본 S76~S77)
+  const EX = { A: [5, 3, 1], B: [4, 2, 1], C: [1, 3, 5] };
+  const ab = cosine(EX.A, EX.B), ac = cosine(EX.A, EX.C);
+  box.append(
+    el("div", { class: "app-title", style: "font-size:22px", text: "같은 메뉴 순서의 벡터" }),
+    el("div", { class: "tablewrap" }, el("table", {}, [
+      el("thead", {}, el("tr", {}, ["가상 응답", "메뉴 1", "메뉴 2", "메뉴 3"].map((h, i) => el("th", { class: i ? "num" : null, text: h })))),
+      el("tbody", {}, Object.entries(EX).map(([k, v]) => el("tr", {}, [el("td", { text: k }), ...v.map(x => el("td", { class: "num", text: String(x) }))])))
+    ])),
+    el("pre", { class: "code" }, el("code", { text:
+`A·B = 5×4 + 3×2 + 1×1 = ${ab.dot}
+두 길이의 곱 = √${ab.la2} × √${ab.lb2} = √${ab.la2 * ab.lb2}
+A와 B의 코사인 = ${ab.dot}/√${ab.la2 * ab.lb2} ≈ ${ab.cos.toFixed(4)}
+A·C = 5×1 + 3×3 + 1×5 = ${ac.dot}
+A와 C의 코사인 = ${ac.dot}/√${ac.la2 * ac.lb2} = ${ac.dot}/${Math.sqrt(ac.la2 * ac.lb2)} ≈ ${ac.cos.toFixed(4)}` })),
+    el("p", { class: "notice", text: "A와 B는 메뉴 1에 높은 별점을, 메뉴 3에 낮은 별점을 주어 방향이 비슷합니다. 모든 값이 양수이므로 0.54를 일반적인 유사성 기준으로 단정하지 않습니다. 0.9959는 친구 관계의 점수도, 건강 점수도 아닙니다." })
+  );
+
+  // 내 결과만 보기 (8단계 가상 응답)
+  const mine = el("div", { style: "display:grid;gap:10px" });
+  const sets = menuSets().filter(s => setRows(s.key).length);
+  const panel = el("div", { class: "panel" }, [el("h3", {}, ["내 결과만 확인하기 ", el("small", { text: "8단계의 가상 응답 사용" })]), mine]);
+  col.append(panel);
+  if (!sets.length) { mine.append(el("p", { class: "notice", text: "8단계에 응답이 없습니다. 8단계에서 가상 응답을 넣은 뒤 다시 보세요." })); return; }
+  const setSel = el("select", { id: "sim-set", class: "btn" }, sets.map(s => el("option", { value: s.key, text: s.label })));
+  if (sets.some(s => s.key === voteSetKey)) setSel.value = voteSetKey;
+  const meSel = el("select", { id: "sim-me", class: "btn" });
+  const res = el("div", {});
+  function fillMe() {
+    const aliases = [...new Set(setRows(setSel.value).map(r => r.alias))];
+    meSel.replaceChildren(...aliases.map(a => el("option", { value: a, text: a })));
+    calc();
+  }
+  function calc() {
+    const set = sets.find(s => s.key === setSel.value), rows = setRows(set.key), me = meSel.value;
+    const scoreOf = (a, m) => { const r = rows.find(x => x.alias === a && x.menu === m); return r && typeof r.score === "number" ? r.score : null; };
+    const others = [...new Set(rows.map(r => r.alias))].filter(a => a !== me);
+    const results = []; let skipped = 0;
+    others.forEach(o => {
+      const common = set.menus.filter(m => scoreOf(me, m) != null && scoreOf(o, m) != null);
+      if (common.length < 2) { skipped++; return; }
+      results.push({ cos: cosine(common.map(m => scoreOf(me, m)), common.map(m => scoreOf(o, m))).cos, k: common.length });
+    });
+    results.sort((a, b) => b.cos - a.cos);
+    res.replaceChildren(
+      el("div", { class: "tablewrap" }, el("table", {}, [
+        el("thead", {}, el("tr", {}, [el("th", { text: "메뉴" }), ...set.menus.map(m => el("th", { class: "num", text: m }))])),
+        el("tbody", {}, el("tr", {}, [el("td", { text: `${me} (나)` }), ...set.menus.map(m => el("td", { class: "num", text: scoreOf(me, m) ?? "빈칸" }))]))
+      ])),
+      results.length ? el("div", { class: "okbox" }, `다른 응답 ${results.length}개와 비교했습니다. 가장 방향이 비슷한 응답과의 코사인은 ${results[0].cos.toFixed(4)}이고, 공통 응답 메뉴는 ${results[0].k}개입니다.`)
+                     : el("div", { class: "alert", text: "공통 응답이 2개 이상인 비교 대상이 없어 계산하지 않았습니다." }),
+      skipped ? el("p", { class: "notice", text: `공통 응답이 2개보다 적은 ${skipped}개는 계산에서 뺐습니다. 미응답을 0점으로 바꾸지 않았습니다.` }) : null,
+      results.length ? el("p", { class: "notice", text: `내 코사인 값들: ${results.map(r => r.cos.toFixed(3)).join(", ")}. 다른 사람의 이름과 별점은 보여 주지 않습니다. 이 값은 이번 메뉴 응답에만 해당하며 성격이나 친밀도를 뜻하지 않습니다.` }) : null
+    );
+  }
+  setSel.addEventListener("change", fillMe); meSel.addEventListener("change", calc);
+  mine.append(el("div", { class: "row" }, [el("label", { for: "sim-set", text: "메뉴 묶음" }), setSel]), el("div", { class: "row" }, [el("label", { for: "sim-me", text: "내 표식" }), meSel]), res);
+  fillMe();
+};
+
+/* ---------- 10단계: 가장 많이 남길 반찬 예측 (학생 8차시, 교원 9~10차시) ---------- */
+APPS.s10 = (box, col) => {
+  // 작은 회귀 (S88~S90)
+  const tr1 = [[1, 8], [2, 6], [3, 4], [4, 2]], te1 = [[1.5, 7.5], [3.5, 2.5]];
+  const w1 = fitLinear(tr1.map(([x]) => [1, x]), tr1.map(([, y]) => y));
+  const p1 = te1.map(([x]) => w1[0] + w1[1] * x);
+  const mae1 = meanOf(te1.map(([, y], i) => Math.abs(y - p1[i])));
+  const base1 = meanOf(tr1.map(([, y]) => y)), bmae1 = meanOf(te1.map(([, y]) => Math.abs(y - base1)));
+  const r = runExp();
+  box.append(
+    el("div", { class: "app-title", style: "font-size:22px", text: "모의 잔반률 회귀" }),
+    el("div", { class: "alert", text: "여기의 잔반률은 규칙으로 만든 모의값입니다. 실제 식단에서 관측한 잔반이나 학교 효과가 아닙니다." }),
+    el("h3", { text: "1. 작은 회귀: 선호 점수 x로 잔반률 y 예측" }),
+    el("div", { class: "tablewrap" }, el("table", {}, [
+      el("thead", {}, el("tr", {}, ["구분", "x", "모의 y", "예측", "절대 오차"].map((h, i) => el("th", { class: i > 1 ? "num" : null, text: h })))),
+      el("tbody", {}, [
+        ...tr1.map(([x, y], i) => el("tr", {}, [el("td", { text: `학습 ${i + 1}` }), el("td", { text: String(x) }), el("td", { class: "num", text: y + "%" }), el("td", { class: "num", text: "" }), el("td", { class: "num", text: "" })])),
+        ...te1.map(([x, y], i) => el("tr", {}, [el("td", { text: `시험 ${i + 1}` }), el("td", { text: String(x) }), el("td", { class: "num", text: y + "%" }), el("td", { class: "num", text: pp(p1[i], 1) + "%" }), el("td", { class: "num", text: pp(Math.abs(y - p1[i]), 1) + "%p" })]))
+      ])
+    ])),
+    el("p", {}, [`학습으로 얻은 직선: 예측 잔반률 = ${pp(w1[0])} − ${pp(-w1[1])}×x. 시험 MAE ${pp(mae1, 1)}%p, 학습 평균 ${pp(base1)}%만 예측하는 기준 모델의 시험 MAE ${pp(bmae1, 1)}%p.`]),
+    el("h3", { text: "2. 메뉴 특성 세 개로 회귀 (학습 16행, 시험 4행)" }),
+    el("div", { class: "tablewrap" }, el("table", {}, [
+      el("thead", {}, el("tr", {}, ["항목", "계수", "이 예제에서의 뜻"].map(h => el("th", { text: h })))),
+      el("tbody", {}, [["절편", r.w[0], `모든 특성이 0이면 ${pp(r.w[0])}%`], ...r.feats.map((k, i) => [FEAT_LABEL[k], r.w[i + 1], `다른 입력이 같을 때 예측값 ${signed(r.w[i + 1])}%p`])]
+        .map(([a, b, c], i) => el("tr", {}, [el("td", { text: a }), el("td", { class: "num", text: i ? signed(b) : pp(b) }), el("td", { text: c })])))
+    ])),
+    el("div", { class: "okbox", text: `시험 MAE ${pp(r.teMae, 2)}%p, 기준 모델(학습 평균 ${pp(r.base, 2)}% 예측) ${pp(r.baseMae, 2)}%p. 같은 시험 4행에서 비교한 값이며 가상 생성 규칙의 결과일 뿐입니다.` }),
+    el("details", {}, [el("summary", { text: "학습 16행과 시험 4행 보기" }), el("div", { class: "tablewrap" }, el("table", {}, [
+      el("thead", {}, el("tr", {}, ["구분", "메뉴", "튀김", "매운맛", "국류", "모의 잔반률", "예측"].map((h, i) => el("th", { class: i > 1 ? "num" : null, text: h })))),
+      el("tbody", {}, [...TRAIN.map(x => ["학습", x, null]), ...TEST.map((x, i) => ["시험", x, r.preds[i]])].map(([g, x, p]) => el("tr", {}, [
+        el("td", { text: g }), el("td", { text: x.name }), el("td", { class: "num", text: String(x.fried) }), el("td", { class: "num", text: String(x.spicy) }), el("td", { class: "num", text: String(x.soup) }),
+        el("td", { class: "num", text: pp(x.y, 1) + "%" }), el("td", { class: "num", text: p == null ? "" : pp(p, 2) + "%" })])))
+    ]))])
+  );
+  // 특성 만들기 (교원 9차시): 실제 메뉴 이름에 규칙 적용
+  const dishes = [...new Map(SNAP.flatMap(d => splitMenu(d.DDISH_NM).map(raw => [cleanDish(raw), raw]))).entries()];
+  const cnt = k => dishes.filter(([n]) => featureOf(n, k) === "미확인").length;
+  col.append(el("div", { class: "panel" }, [
+    el("h3", {}, ["특성 만들기 연습 ", el("small", { text: "실제 메뉴 이름, 교원 9차시" })]),
+    el("p", { class: "notice", text: `저장된 실데이터 ${SNAP.length}일의 메뉴 ${dishes.length}개에 이름 규칙을 적용했습니다. 이름만으로 정하기 어려운 값은 미확인으로 둡니다(튀김 ${cnt("fried")}, 매운맛 ${cnt("spicy")}, 국류 ${cnt("soup")}). 이 분류는 실제 조리법을 확인한 결과가 아니며, 이 표의 자료는 위의 모의 회귀에 섞지 않습니다.` }),
+    el("div", { class: "tablewrap", style: "max-height:320px;overflow:auto" }, el("table", {}, [
+      el("thead", {}, el("tr", {}, ["원문", "정리", "튀김", "매운맛", "국류"].map(h => el("th", { text: h })))),
+      el("tbody", {}, dishes.map(([n, raw]) => el("tr", {}, [el("td", { class: "mono", text: raw }), el("td", { text: n }), ...["fried", "spicy", "soup"].map(k => { const v = featureOf(n, k); return el("td", { class: "num" }, v === "미확인" ? el("span", { class: "pill wait", text: "미확인" }) : String(v)); })])))
+    ]))
+  ]), el("div", { class: "panel" }, [
+    el("h3", { text: "범주를 숫자로 (원핫 인코딩)" }),
+    el("div", { class: "tablewrap" }, el("table", {}, [
+      el("thead", {}, el("tr", {}, ["가상 메뉴", "구이", "볶음", "찜"].map((h, i) => el("th", { class: i ? "num" : null, text: h })))),
+      el("tbody", {}, [["메뉴 A: 구이", 1, 0, 0], ["메뉴 B: 볶음", 0, 1, 0], ["메뉴 C: 찜", 0, 0, 1]].map(rw => el("tr", {}, rw.map((c, i) => el("td", { class: i ? "num" : null, text: String(c) })))))
+    ])),
+    el("p", { class: "notice", text: "순서가 없는 조리 유형에 1, 2, 3 순위를 주지 않습니다. 전처리 규칙은 학습 자료에서 정한 뒤 시험 자료에도 똑같이 적용합니다." })
+  ]));
+};
+
+/* ---------- 11단계: 모델 검증과 한계 (학생 9차시) ---------- */
+const expLog = [];
+APPS.s11 = (box, col) => {
+  const rowsSel = el("select", { id: "exp-rows", class: "btn" }, [el("option", { value: "16", text: "학습 16행" }), el("option", { value: "8", text: "학습 8행" })]);
+  const fchk = Object.keys(FEAT_LABEL).map(k => { const c = el("input", { type: "checkbox", id: "f-" + k, checked: true }); return [k, c, el("label", { for: "f-" + k, class: "row", style: "gap:4px" }, [c, FEAT_LABEL[k]])]; });
+  const oh = el("input", { type: "checkbox", id: "f-oh" }), aug = el("input", { type: "checkbox", id: "f-aug" });
+  const out = el("div", { style: "display:grid;gap:10px" });
+  const logBox = el("div", {});
+  let last = null;
+  function cond() {
+    const feats = fchk.filter(([, c]) => c.checked).map(([k]) => k);
+    return { rows: Number(rowsSel.value), feats, onehot: oh.checked, aug: aug.checked };
+  }
+  function describe(c) {
+    const parts = [];
+    if (c.rows !== 16) parts.push(`학습 ${c.rows}행`);
+    const miss = Object.keys(FEAT_LABEL).filter(k => !c.feats.includes(k));
+    if (miss.length) parts.push(miss.map(k => FEAT_LABEL[k].replace(" 여부", "")).join(", ") + " 제외");
+    if (c.onehot) parts.push("메뉴 이름 원핫 추가");
+    if (c.aug) parts.push("같은 행 복사 2배");
+    return parts.length ? parts.join(", ") : "변경 없음 (기본)";
+  }
+  function run() {
+    const c = cond(), r = runExp(c);
+    last = { c, r };
+    if (!r) { out.replaceChildren(el("div", { class: "alert", text: "계수를 계산할 수 없습니다. 특성이나 행 수를 바꾸세요." })); return; }
+    const gap = r.teMae - r.trMae;
+    out.replaceChildren(
+      el("div", { class: "tablewrap" }, el("table", {}, [
+        el("thead", {}, el("tr", {}, ["조건", "학습 행", "계수 수", "학습 MAE", "시험 MAE", "기준 모델"].map((h, i) => el("th", { class: i ? "num" : null, text: h })))),
+        el("tbody", {}, el("tr", {}, [el("td", { style: "white-space:normal", text: describe(c) }), el("td", { class: "num", text: String(r.n) }), el("td", { class: "num", text: String(r.w.length) }),
+          el("td", { class: "num", text: pp(r.trMae) + "%p" }), el("td", { class: "num", text: pp(r.teMae) + "%p" }), el("td", { class: "num", text: pp(r.baseMae) + "%p" })]))
+      ])),
+      el("p", { class: "notice", text: `계수: 절편 ${pp(r.w[0])}` + r.feats.map((k, i) => `, ${FEAT_LABEL[k]} ${signed(r.w[i + 1])}`).join("") + (r.names.length ? `, 메뉴 이름 열 ${r.names.length}개` : "") }),
+      gap > 1 && r.trMae < 0.2 ? el("div", { class: "alert", text: "학습 오차는 거의 0인데 시험 오차가 큽니다. 학습 자료의 우연한 특징까지 맞추었을 수 있습니다(과적합)." }) : null,
+      c.aug ? el("div", { class: "notice", text: "같은 행을 복사해 늘리면 행 수는 두 배가 되지만 새로운 관찰이 추가된 것은 아니어서 계수가 그대로입니다. 증강한 자료를 독립적인 실제 응답으로 세지 않습니다." }) : null
+    );
+  }
+  function drawLog() {
+    logBox.replaceChildren(el("div", { class: "panel" }, [
+      el("h3", {}, ["실험 기록표 ", el("small", { text: "조건 하나와 결과 두 개" })]),
+      expLog.length ? el("div", { class: "tablewrap" }, el("table", {}, [
+        el("thead", {}, el("tr", {}, ["실험", "바꾼 조건", "학습 MAE", "시험 MAE"].map((h, i) => el("th", { class: i > 1 ? "num" : null, text: h })))),
+        el("tbody", {}, expLog.map((e, i) => el("tr", {}, [el("td", { text: i === 0 ? "기본" : String.fromCharCode(64 + i) }), el("td", { style: "white-space:normal", text: e.label }), el("td", { class: "num", text: pp(e.tr) + "%p" }), el("td", { class: "num", text: pp(e.te) + "%p" })])))
+      ])) : el("p", { class: "notice", text: "아직 기록이 없습니다. 실행한 뒤 기록표에 추가하세요. 결과를 미리 적지 않습니다." }),
+      el("p", { class: "notice", text: "이 수치는 이 페이지의 모의 자료에서 계산한 값입니다. 검토본의 Python 예제와 자료가 달라 수치가 다를 수 있으며, 늘 같은 순서가 되는 법칙도 아닙니다." }),
+      expLog.length ? el("button", { class: "btn small", type: "button", text: "기록표 비우기", onclick: () => { expLog.length = 0; drawLog(); } }) : null
+    ]));
+  }
+  [rowsSel, oh, aug, ...fchk.map(([, c]) => c)].forEach(x => x.addEventListener("change", run));
+  box.append(
+    el("div", { class: "app-title", style: "font-size:22px", text: "한 번에 한 조건만" }),
+    el("div", { class: "row" }, [el("label", { for: "exp-rows", text: "학습 자료" }), rowsSel]),
+    el("div", { class: "row" }, [el("span", { class: "notice", text: "특성" }), ...fchk.map(x => x[2])]),
+    el("div", { class: "row" }, [el("label", { for: "f-oh", class: "row", style: "gap:4px" }, [oh, "메뉴 이름 원핫 추가(행마다 열 하나)"]), el("label", { for: "f-aug", class: "row", style: "gap:4px" }, [aug, "같은 행 복사로 2배"])]),
+    out,
+    el("div", { class: "row" }, el("button", { class: "btn primary", type: "button", text: "기록표에 추가", onclick: () => { if (last && last.r) { expLog.push({ label: describe(last.c), tr: last.r.trMae, te: last.r.teMae }); drawLog(); } } }))
+  );
+  // 최소 최대 변환 (S100)
+  const mm = [1, 2, 3], mn = Math.min(...mm), mx = Math.max(...mm);
+  col.append(logBox, el("div", { class: "panel" }, [
+    el("h3", { text: "변환 기준도 학습 자료에서" }),
+    el("pre", { class: "code" }, el("code", { text: `학습값 [${mm.join(", ")}]: 최솟값 ${mn}, 최댓값 ${mx}\n변환 = (값 − ${mn}) ÷ (${mx} − ${mn})\n학습의 2 → ${pp((2 - mn) / (mx - mn))}\n새로운 값 4 → ${pp((4 - mn) / (mx - mn))}  (0~1 밖이어도 기준을 다시 계산하지 않음)` }))
+  ]), el("div", { class: "panel" }, [
+    el("h3", { text: "증강과 편향 질문" }),
+    el("ul", { class: "added" }, ["원자료에 어떤 메뉴와 대상이 빠졌는가", "가상 자료를 만드는 규칙은 무엇인가", "증강 전후를 같은 시험 자료로 비교했는가", "새로운 실제 관찰이 필요한 부분은 무엇인가"].map(t => el("li", { text: t })))
+  ]));
+  run(); drawLog();
+};
+
+/* ---------- 12단계: 식단 개선안 (학생 10차시) ---------- */
+const proposal = { fact: "", interp: "", idea: "", check: "", kinds: new Set(), stake: {}, peer: {} };
+APPS.s12 = (box, col) => {
+  // 앞 단계의 근거
+  const ev = [];
+  const sheetTopic = sheet.filter(r => r[2] === design.topic);
+  if (sheetTopic.length) {
+    const top = Object.entries(sheetTopic.reduce((a, r) => (a[r[3]] = (a[r[3]] || 0) + 1, a), {})).sort((a, b) => b[1] - a[1])[0];
+    ev.push({ kind: "가상", src: "4~5단계 모의 시트", text: `모의 시트의 ${design.topic} 월드컵 기록 ${sheetTopic.length}건 중 ${top[0]}의 우승이 ${top[1]}건이었다.` });
+  } else ev.push({ kind: "가상", src: "6단계 가상 6건", text: "가상 응답 6건 중 사과 우승이 3건이었다." });
+  const d3 = SNAP.find(r => r.MLSV_YMD === "20261103");
+  ev.push({ kind: "실제", src: `NEIS 공개 API, 조회 ${SNAP_AT}`, text: `2026-11-03 당곡고 중식은 메뉴 ${splitMenu(d3.DDISH_NM).length}개, ${d3.CAL_INFO}였다.` });
+  const vs = menuSets().find(s => setRows(s.key).length);
+  if (vs) {
+    const a = aggregate(vs.key, vs.menus).filter(x => x.avg != null).sort((x, y) => x.avg - y.avg)[0];
+    if (a) ev.push({ kind: "가상", src: "8단계 별점 조사", text: `${vs.label}에서 ${a.m}의 평균 별점이 ${pp(a.avg, 1)}점(${a.n}건)으로 가장 낮았다.` });
+  }
+  const rr = runExp();
+  ev.push({ kind: "모의", src: "10단계 모의 회귀", text: `모의 잔반률 회귀에서 튀김 여부 계수는 ${signed(rr.w[1])}%p, 시험 MAE는 ${pp(rr.teMae)}%p였다.` });
+
+  const fields = [
+    ["fact", "확인한 사실", "[자료, 기간, 건수]에서 [관찰]을 확인했다."],
+    ["interp", "조심스러운 해석", "[조건]에서는 [가능성]을 생각할 수 있다."],
+    ["idea", "작은 제안", "[범위]에서 [작은 변화]를 검토해 보고 싶다."],
+    ["check", "먼저 확인", "[측정, 관계자 협의, 운영 조건]이 필요하다."]
+  ];
+  const preview = el("div", {});
+  const OVER = ["반드시", "항상", "무조건", "학교 전체", "모든 학생", "확실히", "틀림없이"];
+  const inputs = {};
+  function drawPreview() {
+    const all = fields.map(([k]) => proposal[k]).join(" ");
+    const over = OVER.filter(w => all.includes(w));
+    const prelim = [...proposal.kinds].some(k => k !== "실제");
+    const stakeDone = Object.values(proposal.stake).filter(Boolean).length;
+    preview.replaceChildren(el("div", { class: "panel", style: "background:var(--bg)" }, [
+      el("div", { class: "row" }, [el("h3", { text: "식단 개선 제안서" }), prelim ? el("span", { class: "pill wait", text: "예비 제안" }) : null]),
+      prelim ? el("p", { class: "notice", text: "가상값이나 모의 결과를 근거로 사용했습니다. 실제 측정 자료가 생기기 전까지는 예비 제안이며, 학교의 승인이나 실제 시행을 뜻하지 않습니다." }) : null,
+      ...fields.map(([k, t]) => el("p", {}, [el("b", { text: t + ": " }), proposal[k] || "(아직 쓰지 않음)"])),
+      over.length ? el("div", { class: "alert", text: `단정 표현을 찾았습니다: ${over.join(", ")}. 수집한 자료의 범위에 맞게 고쳐 씁니다.` }) : el("div", { class: "okbox", text: "단정 표현이 보이지 않습니다." }),
+      el("p", { class: "notice", text: `이해관계자 검토 ${stakeDone}/4` })
+    ]));
+  }
+  box.append(
+    el("div", { class: "app-title", style: "font-size:22px", text: "식단 개선안 쓰기" }),
+    el("div", { class: "field" }, [el("label", { text: "앞 단계의 근거 (누르면 확인한 사실에 넣습니다)" }),
+      el("div", { style: "display:grid;gap:6px" }, ev.map(e => el("button", { class: "btn", type: "button", style: "text-align:left", onclick: () => {
+        proposal.fact = (proposal.fact ? proposal.fact + " " : "") + e.text; proposal.kinds.add(e.kind); inputs.fact.value = proposal.fact; drawPreview(); } },
+        [el("span", { class: "pill " + (e.kind === "실제" ? "ok" : "wait"), text: e.kind }), " ", e.text, el("span", { class: "notice", style: "display:block;background:none;padding:2px 0 0", text: "출처: " + e.src })])))]),
+    ...fields.map(([k, t, ph]) => {
+      const i = el("input", { type: "text", id: "prop-" + k, value: proposal[k], placeholder: ph });
+      i.addEventListener("input", () => { proposal[k] = i.value; drawPreview(); });
+      inputs[k] = i;
+      return el("div", { class: "field" }, [el("label", { for: "prop-" + k, text: t }), i]);
+    }),
+    el("div", { class: "row" }, el("button", { class: "btn small", type: "button", text: "근거 표시 초기화", onclick: () => { proposal.kinds.clear(); drawPreview(); } })),
+    preview
+  );
+  const stakes = [["student", "학생: 선택의 다양성과 참여 부담"], ["nutri", "영양교사: 영양 균형과 식단 운영 조건"], ["cook", "조리 종사자: 조리 과정, 안전, 업무 부담"], ["school", "학교: 실행 가능성과 자료 활용 범위"]];
+  const rubric = [["problem", "문제 정의", "누구의 어떤 문제인지 분명한가"], ["data", "자료 근거", "출처, 대상, 기간, 가상 여부가 보이는가"], ["scope", "해석의 범위", "한계와 불확실성을 말했는가"], ["plan", "실행 계획", "현장 협의, 측정, 부작용 확인이 있는가"]];
+  col.append(el("div", { class: "panel" }, [
+    el("h3", {}, ["이해관계자 검토 ", el("small", { text: "직접 듣지 않은 의견은 들은 것처럼 쓰지 않기" })]),
+    el("ul", { class: "checks" }, stakes.map(([k, t]) => el("li", {}, el("label", { for: "st-" + k }, [
+      (() => { const c = el("input", { type: "checkbox", id: "st-" + k, checked: !!proposal.stake[k] }); c.addEventListener("change", () => { proposal.stake[k] = c.checked; drawPreview(); }); return c; })(),
+      el("span", { text: t })]))))
+  ]), el("div", { class: "panel" }, [
+    el("h3", {}, ["동료 평가 ", el("small", { text: "사람 대신 주장과 자료를 검토" })]),
+    ...rubric.map(([k, t, q]) => el("fieldset", { style: "border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:0" }, [
+      el("legend", { style: "font-weight:700;padding:0 4px", text: t }), el("p", { class: "notice", style: "background:none;padding:0", text: q }),
+      el("div", { class: "row" }, ["충분", "보완", "다시 검토"].map(v => el("label", { class: "row", style: "gap:4px" }, [
+        (() => { const rd = el("input", { type: "radio", name: "peer-" + k, value: v, checked: proposal.peer[k] === v }); rd.addEventListener("change", () => proposal.peer[k] = v); return rd; })(), v])))
+    ])),
+    el("p", { class: "notice", text: "모의 자료를 실제 성과처럼 주장한 경우 다시 검토로 분류합니다. 점수와 배점은 교사가 수업 운영 기준에 맞게 정합니다." })
+  ]));
+  drawPreview();
+};
+
+/* ---------- 시작 ---------- */
+const start = (location.hash || "").replace("#", "");
+go(STAGES.some(s => s.id === start) ? start : "s1", false);
+})();
+</script>
+</body>
+</html>
