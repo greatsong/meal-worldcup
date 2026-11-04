@@ -286,3 +286,28 @@ mark.slot{background:var(--accent-soft);color:var(--accent-strong);border-radius
 .opt.wrong{border-color:var(--bad);background:var(--bad-soft)}
 .glossary td{white-space:normal}
 .glossary .term{font-weight:600;white-space:nowrap}
+
+/* 50분 보강: 시간표, 도입, 활동지, 확인 칸 */
+.timetable td{white-space:normal}
+.timetable tr.sum td{font-weight:700;background:var(--sunk)}
+.opening{border:1px dashed var(--gc);border-radius:12px;padding:12px 16px;background:var(--gs)}
+.opening ul{margin:0;padding-left:18px;display:grid;gap:3px}
+.tnote-in{margin-top:8px;font-size:13.5px;color:var(--ink-2)}
+.tnote-in summary{font-weight:600;color:var(--muted);font-size:13px}
+h2 .min{margin-left:8px;font-size:12px;font-weight:600;color:var(--gc);background:var(--gs);border-radius:9999px;padding:2px 9px;vertical-align:middle;letter-spacing:0}
+.ws{border:1px solid var(--line);border-left:3px solid var(--g1,var(--accent));border-radius:12px;background:var(--surface);padding:12px 14px;display:grid;gap:8px}
+.lesson .ws{border-left-color:var(--gc)}
+.ws-h{font-size:12.5px;font-weight:700;color:var(--gc)}
+.ws textarea{font:inherit;font-size:14px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%;resize:vertical;min-height:44px}
+.ws textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(59,130,246,.15)}
+.reveal{border:1px solid var(--line);border-radius:12px;background:var(--sunk);padding:10px 14px}
+.reveal summary{font-weight:600;font-size:14px;cursor:pointer}
+.reveal p{margin-top:6px;font-size:14px;color:var(--ink-2)}
+.mine ul{margin:8px 0 0;padding-left:18px;display:grid;gap:3px;font-size:14px}
+
+/* 교원 연수 묶음 색 (커리큘럼 위버 단계색: 하늘, 장미) */
+:root{--g4:#0EA5E9;--g4-soft:#F0F9FF;--g5:#F43F5E;--g5-soft:#FFF1F2}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--g4:#38BDF8;--g4-soft:#10232F;--g5:#FB7185;--g5-soft:#2E161C}}
+:root[data-theme="dark"]{--g4:#38BDF8;--g4-soft:#10232F;--g5:#FB7185;--g5-soft:#2E161C}
+.lesson-group.g4,.lesson.g4{--gc:var(--g4);--gs:var(--g4-soft)}
+.lesson-group.g5,.lesson.g5{--gc:var(--g5);--gs:var(--g5-soft)}
